@@ -125,7 +125,7 @@ class RubricAgent:
         return dict(self._strategy_weights)
 
     @property
-    def rejected_hashes(self) -> set[str]:
+    def rejected_hashes(self) -> frozenset[str]:
         return frozenset(self._rejected_hashes)
 
     # ── Private scoring ───────────────────────────────────────────────────────
