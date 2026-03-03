@@ -60,6 +60,9 @@ class LeanVerifier:
 
     def _compile(self, source: str) -> tuple[bool, dict[str, Any]]:
         """Write source to a temp file and attempt compilation."""
+        if self._lean is None:
+            return False, {"reason": "Lean binary not available"}
+
         with tempfile.TemporaryDirectory() as tmpdir:
             lean_file = Path(tmpdir) / "Proof.lean"
             lean_file.write_text(source)
