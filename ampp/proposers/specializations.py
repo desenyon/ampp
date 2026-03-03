@@ -41,7 +41,10 @@ def _llm_generate(system_prompt: str, user_prompt: str) -> list[str]:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            text = message.content[0].text
+            text_block = next(
+                (b for b in message.content if b.type == "text"), None
+            )
+            text = text_block.text if text_block is not None else ""  # type: ignore[union-attr]
         else:
             import openai
             client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
