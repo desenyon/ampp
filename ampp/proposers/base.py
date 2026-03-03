@@ -1,165 +1,83 @@
-"""
-Base Proposer (Section 6)
-
-Abstract base class for all specialized proposers.
-Each proposer outputs structured StepCandidate objects only.
-No prose is accepted.
-"""
-
+"""Base interface for all Proposer specialisations."""
 from __future__ import annotations
 
-import abc
-import logging
+import hashlib
+from abc import ABC, abstractmethod
 from typing import Any
 
-from ampp.models.proof_state import ProofState
-from ampp.models.state import FormalSpec, Subgoal
-from ampp.models.step_candidate import StepCandidate
+import uuid
 
-logger = logging.getLogger(__name__)
+from ampp.schemas import (
+    ActionType,
+    NewClaimSpec,
+    SmallCaseTest,
+    StepCandidate,
+    StrategyFamily,
+    VerificationPlan,
+)
 
 
-class BaseProposer(abc.ABC):
+class BaseProposer(ABC):
+    """Abstract base class for a single-strategy proposer.
+
+    Each proposer generates one or more StepCandidates for a given subgoal.
+    All candidates must pass pydantic validation before being returned.
     """
-    Abstract base for specialized proof-step proposers.
 
-    Each concrete proposer specializes in a particular proof strategy
-    (induction, extremal principle, double counting, etc.) and emits
-    StepCandidate objects that conform to the schema.
-    """
-
-    name: str = "base"
-    strategy_family: str = ""
-
-    def __init__(self, llm_assist: Any | None = None) -> None:
-        self.llm_assist = llm_assist
-
-    @abc.abstractmethod
-    def propose(
-        self,
-        subgoal: Subgoal,
-        spec: FormalSpec,
-        state: ProofState,
-    ) -> list[StepCandidate]:
-        """
-        Generate StepCandidate objects for the given subgoal.
-
-        Args:
-            subgoal: The subgoal to address.
-            spec: The formal specification.
-            state: Current proof state.
-
-        Returns:
-            List of structurally complete StepCandidate objects.
-            Incomplete candidates are filtered out.
-        """
+    @property
+    @abstractmethod
+    def strategy_family(self) -> StrategyFamily:
         ...
 
-    def _filter_complete(
-        self, candidates: list[StepCandidate]
-    ) -> list[StepCandidate]:
-        """Discard candidates missing required fields."""
-        valid = []
-        for c in candidates:
-            if c.is_structurally_complete():
-                valid.append(c)
-            else:
-                logger.debug(
-                    "Proposer %s: discarding incomplete candidate %s",
-                    self.name,
-                    c.id,
-                )
-        return valid
-
-    def _build_prompt(
+    @abstractmethod
+    def propose(
         self,
-        subgoal: Subgoal,
-        spec: FormalSpec,
-        state: ProofState,
-    ) -> str:
-        """Build a structured prompt for LLM-assisted proposal generation."""
-        verified = [c.statement for c in state.verified_claims]
-        rejected_hashes = state.claim_hashes()
+        subgoal_id: str,
+        branch_id: str,
+        spec: dict[str, Any],
+        verified_claims: list[dict[str, Any]],
+        attempts: list[dict[str, Any]],
+    ) -> list[StepCandidate]:
+        """Generate candidate proof steps for the given subgoal."""
+        ...
 
-        return (
-            f"You are a {self.name} proof strategist.\n\n"
-            f"Strategy family: {self.strategy_family}\n\n"
-            f"Problem (canonical):\n{spec.canonical_form}\n\n"
-            f"Current subgoal:\n{subgoal.statement}\n\n"
-            f"Verified claims:\n{verified}\n\n"
-            f"Rejected claim hashes (avoid): {len(rejected_hashes)} entries\n\n"
-            "Generate a proof step as JSON with:\n"
-            "- action_type: one of [introduce_definition, propose_lemma, "
-            "apply_lemma, case_split, induction_step, rewrite, "
-            "construct_witness, bound_argument]\n"
-            "- new_claims: list of precise mathematical statements\n"
-            "- dependencies: list of claim IDs this step depends on\n"
-            "- verification_plan: {applicable_verifiers, success_criteria, "
-            "z3_encoding_hint, lean_proof_sketch, falsification_bounds}\n"
-            "- small_case_tests: list of {parameters, expected_result, "
-            "description}\n"
-            "- lean_stub: Lean 4 code skeleton\n"
-            "- rationale: brief justification\n\n"
-            "Return JSON array of step candidates."
+    # ── Utility helpers for subclasses ────────────────────────────────────────
+
+    def _build_candidate(
+        self,
+        subgoal_id: str,
+        branch_id: str,
+        action_type: ActionType,
+        statements: list[str],
+        dependencies: list[str],
+        stages: list[str],
+        lean_stub: str,
+        small_cases: list[SmallCaseTest] | None = None,
+        success_criteria: dict[str, str] | None = None,
+        enumeration_bound: int | None = None,
+    ) -> StepCandidate:
+        new_claims = [NewClaimSpec(statement=s) for s in statements]
+        candidate_hash = self._hash_candidate(subgoal_id, statements)
+        return StepCandidate(
+            id=str(uuid.uuid4()),
+            subgoal_id=subgoal_id,
+            action_type=action_type,
+            new_claims=new_claims,
+            dependencies=dependencies,
+            verification_plan=VerificationPlan(
+                stages=stages,
+                success_criteria=success_criteria or {},
+                enumeration_bound=enumeration_bound,
+            ),
+            small_case_tests=small_cases or [],
+            lean_stub=lean_stub,
+            strategy_family=self.strategy_family,
+            candidate_hash=candidate_hash,
+            branch_id=branch_id,
         )
 
-    def _parse_llm_candidates(
-        self,
-        response: str,
-        subgoal: Subgoal,
-    ) -> list[StepCandidate]:
-        """Parse LLM response into StepCandidate objects."""
-        import json
-
-        from ampp.models.step_candidate import (
-            SmallCaseTest,
-            VerificationPlan,
-        )
-
-        try:
-            data = json.loads(response)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to parse LLM response for %s", self.name)
-            return []
-
-        if isinstance(data, dict):
-            data = [data]
-
-        candidates: list[StepCandidate] = []
-        for item in data:
-            vp_data = item.get("verification_plan", {})
-            vp = VerificationPlan(
-                applicable_verifiers=tuple(
-                    vp_data.get("applicable_verifiers", [])
-                ),
-                success_criteria=vp_data.get("success_criteria", ""),
-                z3_encoding_hint=vp_data.get("z3_encoding_hint", ""),
-                lean_proof_sketch=vp_data.get("lean_proof_sketch", ""),
-                falsification_bounds=vp_data.get("falsification_bounds", ""),
-            )
-
-            tests = []
-            for t in item.get("small_case_tests", []):
-                tests.append(
-                    SmallCaseTest(
-                        parameters=t.get("parameters", {}),
-                        expected_result=t.get("expected_result"),
-                        description=t.get("description", ""),
-                    )
-                )
-
-            sc = StepCandidate(
-                subgoal_id=subgoal.id,
-                action_type=item.get("action_type", ""),
-                new_claims=tuple(item.get("new_claims", [])),
-                dependencies=tuple(item.get("dependencies", [])),
-                verification_plan=vp,
-                small_case_tests=tuple(tests),
-                lean_stub=item.get("lean_stub", ""),
-                strategy_family=self.strategy_family,
-                rationale=item.get("rationale", ""),
-                proposer_name=self.name,
-            )
-            candidates.append(sc)
-
-        return self._filter_complete(candidates)
+    @staticmethod
+    def _hash_candidate(subgoal_id: str, statements: list[str]) -> str:
+        sorted_stmts = sorted(s.strip().lower() for s in statements)
+        payload = subgoal_id + "".join(sorted_stmts)
+        return hashlib.sha256(payload.encode()).hexdigest()

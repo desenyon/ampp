@@ -1,0 +1,29 @@
+[workspace]
+members = ["crates/ampp-core", "crates/ampp-ipc", "crates/ampp-cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Naitik Gupta"]
+license = "MIT"
+repository = "https://github.com/your-username/ampp"
+description = "Autonomous Mathematical Proof Pipeline — Rust + Python"
+keywords = ["mathematics", "proof", "formal-verification", "lean", "ai"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+dashmap = "6"
+clap = { version = "4", features = ["derive"] }
+rand = "0.8"

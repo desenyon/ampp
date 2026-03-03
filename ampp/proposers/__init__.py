@@ -1,5 +1,4 @@
-"""Proposer ensemble — specialized proof step generators."""
-
+"""Proposer sub-package."""
 from ampp.proposers.base import BaseProposer
 from ampp.proposers.ensemble import ProposerEnsemble
 

@@ -1,58 +1,68 @@
-# Python
+# ── Rust ───────────────────────────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+Cargo.lock             # keep for binaries; remove this line if publishing a library
+
+# ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg
-*.egg-info/
-dist/
-build/
-eggs/
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Virtual environments
+.Python
 .venv/
 venv/
 ENV/
 env/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-wheel-metadata/
+.pip-index-cache/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.project
-.settings/
+# ── Jupyter / IPython ──────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
 
-# Testing
+# ── Testing / Coverage ─────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
-.tox/
-.nox/
+.hypothesis/
+*.prof
 
-# mypy
-.mypy_cache/
-dmypy.json
-dmypy.txt
+# ── AMPP runtime artefacts ─────────────────────────────────────────────────────
+ampp_state.db
+ampp_state.db-shm
+ampp_state.db-wal
+output/
+*.db
+*.db-shm
+*.db-wal
 
-# ruff
-.ruff_cache/
+# ── IDE ────────────────────────────────────────────────────────────────────────
+# Commit the shared workspace settings (rust-analyzer path, recommended extensions)
+# but ignore personal overrides.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
 
-# OS
+# ── OS ─────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+*.swp
+*~
 
-# Lean
-.lake/
-lake-packages/
-lake-manifest.json
+# ── Secrets ────────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets/
 
-# Pipeline outputs
-output/
-logs/
-*.jsonl
+# ── Misc / repo-specific ───────────────────────────────────────────────────────
+logos/

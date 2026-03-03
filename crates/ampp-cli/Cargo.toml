@@ -1,0 +1,22 @@
+[package]
+name = "ampp-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ampp"
+path = "src/main.rs"
+
+[dependencies]
+ampp-core = { path = "../ampp-core" }
+ampp-ipc  = { path = "../ampp-ipc" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+clap.workspace = true

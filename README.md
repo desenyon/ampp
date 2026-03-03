@@ -1,263 +1,376 @@
-<p align="center">
-  <strong>AMPP</strong><br>
-  <em>Autonomous Mathematical Proof Pipeline</em>
-</p>
+# AMPP — Autonomous Mathematical Proof Pipeline
 
-<p align="center">
-  <a href="#architecture">Architecture</a> |
-  <a href="#how-it-works">How It Works</a> |
-  <a href="#installation">Installation</a> |
-  <a href="#usage">Usage</a> |
-  <a href="#verification-stack">Verification Stack</a> |
-  <a href="#project-structure">Project Structure</a>
-</p>
+[![CI](https://github.com/your-username/ampp/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/ampp/actions/workflows/ci.yml)
+[![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+AMPP is a production-grade autonomous system for solving advanced mathematical problems — combinatorics, number theory, Erdős-style extremal problems — with **formal, machine-verifiable proofs**. It combines a deterministic Rust core with a Python AI/solver ecosystem connected via a high-performance JSON-RPC bridge.
+
+**The central invariant:** no mathematical statement is ever accepted as true unless a deterministic verifier (up to and including Lean 4) independently confirms it.
 
 ---
 
-AMPP is an autonomous system that proves mathematical theorems with machine-checked guarantees. It targets advanced combinatorics, number theory, and Erdos-style problems — the kind of mathematics where a single clever construction or counterexample can change everything.
+## Table of Contents
 
-The system separates creativity from correctness. Language models generate hypotheses. Deterministic verifiers — SymPy, Z3, Vampire, and Lean 4 — establish truth. Nothing enters the proof state unless a formal checker confirms it.
-
-**The invariant is absolute: no unverified claim contaminates the proof.**
+1. [Architecture Overview](#architecture-overview)
+2. [Component Breakdown](#component-breakdown)
+   - [Rust Core](#rust-core)
+   - [Python Solver Stack](#python-solver-stack)
+   - [IPC Bridge](#ipc-bridge)
+3. [Verification Cascade](#verification-cascade)
+4. [Proof Loop](#proof-loop)
+5. [Quick Start](#quick-start)
+6. [Installation](#installation)
+7. [CLI Reference](#cli-reference)
+8. [Configuration & Environment Variables](#configuration--environment-variables)
+9. [Output Artefacts](#output-artefacts)
+10. [Testing](#testing)
+11. [Project Structure](#project-structure)
+12. [Design Philosophy](#design-philosophy)
+13. [Contributing](#contributing)
 
 ---
 
-## Architecture
-
-AMPP operates as a closed loop. Each iteration takes the current proof state, identifies the most promising subgoal, generates proof candidates through an ensemble of ten specialized proposers, subjects them to a six-layer verification cascade, and commits verified results through an atomic two-phase protocol.
+## Architecture Overview
 
 ```
-                            +-------------------+
-                            |   Problem Input   |
-                            +--------+----------+
-                                     |
-                            +--------v----------+
-                            |    Normalizer     |  raw text --> FormalSpec
-                            +--------+----------+
-                                     |
-                            +--------v----------+
-                            |     Planner       |  FormalSpec --> subgoal DAG
-                            +--------+----------+
-                                     |
-                  +------------------v------------------+
-                  |        Proposer Ensemble            |
-                  |  10 strategies running in parallel  |
-                  +------------------+------------------+
-                                     |
-                            +--------v----------+
-                            |   Rubric Agent    |  quality gate / filter
-                            +--------+----------+
-                                     |
-              +----------------------v----------------------+
-              |         Verification Cascade                |
-              |  V0: Structural   V1: Counterexample        |
-              |  V2: Symbolic     V3: SMT (Z3)              |
-              |  V4: ATP          V5: Lean 4                 |
-              +----------------------+----------------------+
-                                     |
-                            +--------v----------+
-                            |  Two-Phase Commit |  atomic state update
-                            +--------+----------+
-                                     |
-                            +--------v----------+
-                            |    State Update   |
-                            +--------+----------+
-                                     |
-                                     +-------> loop
+┌─────────────────────────────────────────────────────────────────┐
+│                        Problem Input (CLI)                       │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                     RUST CORE  (ampp-cli / ampp-core)           │
+│                                                                  │
+│  ┌──────────────┐   ┌───────────────┐   ┌────────────────────┐  │
+│  │  ProofStore  │   │  BeamSearch   │   │  VerifyCascade     │  │
+│  │  (SQLite)    │   │  Manager      │   │  V0 – structural   │  │
+│  │  append-only │   │  3-6 branches │   │  (in-process Rust) │  │
+│  └──────────────┘   └───────────────┘   └────────────────────┘  │
+│                                                                  │
+│  ┌──────────────┐   ┌───────────────┐   ┌────────────────────┐  │
+│  │  Planner     │   │  Normalizer   │   │  Artifacts         │  │
+│  │  (subgoal    │   │  (FormalSpec) │   │  (manifest, lean,  │  │
+│  │   DAG)       │   │               │   │   proof graph)     │  │
+│  └──────────────┘   └───────────────┘   └────────────────────┘  │
+│                                                                  │
+│         JSON-RPC over subprocess stdin/stdout (PythonWorker)    │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    PYTHON SOLVER STACK  (ampp/)                  │
+│                                                                  │
+│  ┌──────────────┐   ┌───────────────┐   ┌────────────────────┐  │
+│  │  Normalizer  │   │  Proposer     │   │  RubricAgent       │  │
+│  │  (FormalSpec)│   │  Ensemble     │   │  (quality gate,    │  │
+│  │              │   │  5 strategies │   │   strategy weights)│  │
+│  └──────────────┘   └───────────────┘   └────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Verification Cascade  V1 → V2 → V3 → V4 → V5             │  │
+│  │  CounterexampleVerifier │ SymPy │ Z3 │ ATP │ Lean 4        │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌──────────────┐   ┌───────────────┐                           │
+│  │ Conjecture   │   │ Strategy      │                           │
+│  │ Miner        │   │ Controller    │                           │
+│  └──────────────┘   └───────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Six parallel subsystems run alongside the main loop:
-
-- **Beam Search Manager** maintains 3-6 concurrent proof states to prevent premature strategic commitment.
-- **Strategy Controller** dynamically switches among proof strategies when progress stalls.
-- **Rubric Agent** enforces process quality, prevents hallucinated leaps, and gates verification spending.
-- **Counterexample Refiner** learns structural patterns from failed claims and prevents repeated failures.
-- **Conjecture Miner** enumerates small instances and discovers invariants, bounds, and structural conjectures.
-- **Lemma Minimizer** decomposes failing Lean proofs into smaller, independently verifiable pieces.
+The pipeline separates **creativity** (Python LLM proposers) from **correctness** (deterministic verifiers). The Rust core enforces the two-phase commit: a claim moves from `proposed` → `verified` only after the full cascade succeeds.
 
 ---
 
-## How It Works
+## Component Breakdown
 
-### The Proof State
+### Rust Core
 
-All state is append-only and versioned. Every mutation increments a version counter and logs the change. The state contains:
+| Crate | Purpose |
+|-------|---------|
+| `ampp-core` | State model, SQLite store, V0 checker, verification cascade orchestrator, beam search, planner, normalizer, artifacts |
+| `ampp-ipc` | `PythonWorker` subprocess manager — spawns Python worker, JSON-RPC call/response |
+| `ampp-cli` | CLI entry point — assembles all components, runs the main proof loop |
 
-- **Claims** — mathematical assertions with status `proposed`, `verified`, or `rejected`. Rejected claims are immutable.
-- **Subgoals** — nodes in a dependency DAG, ranked by `impact_score / estimated_complexity`.
-- **Counterexamples** — concrete witnesses that disprove proposed claims.
-- **Attempts** — full records of every failed proof attempt, including failure stage and strategy used.
+**State objects** (all serialised to SQLite, append-only):
 
-### The Proposer Ensemble
+| Object | Key fields |
+|--------|-----------|
+| `Claim` | `id`, `statement`, `type` (lemma/theorem/auxiliary), `status` (proposed/verified/rejected), `dependencies`, `verification_artifacts`, `proof_hash` |
+| `Definition` | `id`, `statement`, `canonical_form`, `lean_name`, `hash` |
+| `Subgoal` | `id`, `target_claim`, `priority_score`, `difficulty_estimate`, `blockers` |
+| `Counterexample` | `claim_id`, `witness_structure`, `generation_method`, `seed` |
+| `Attempt` | `branch_id`, `failed_claim`, `failure_reason`, `verifier_stage` |
+| `StepCandidate` | `subgoal_id`, `action_type`, `new_claims`, `dependencies`, `verification_plan`, `small_case_tests`, `lean_stub` |
 
-Ten specialized proposers generate structured `StepCandidate` objects in parallel:
+### Python Solver Stack
 
-| Proposer | Method |
-|---|---|
-| Induction | Standard and strong induction on natural numbers |
-| Extremal Principle | Select minimal/maximal element and derive contradiction |
-| Invariant | Identify quantities preserved or monotone under operations |
-| Double Counting | Count the same set two ways to establish equality |
-| Constructive | Explicitly build the required object |
-| Contradiction | Assume negation and derive inconsistency |
-| Algebraic Normalization | Rewrite expressions into canonical algebraic forms |
-| Graph Translation | Reinterpret the problem in graph-theoretic language |
-| Minimal Counterexample | Assume a smallest counterexample exists and show it cannot |
-| Counterexample Search | Systematically search for disproving witnesses |
+| Module | Role |
+|--------|------|
+| `ampp/normalizer.py` | Converts raw problem text → `FormalSpec` (variables, quantifiers, constraints, target, edge cases, Lean namespace) |
+| `ampp/schemas.py` | Pydantic models mirroring the Rust state; JSON-RPC contract |
+| `ampp/proposers/` | 5 strategy-specific proposers + ensemble with deduplication |
+| `ampp/agents/rubric_agent.py` | 7-dimension quality gate; scores and filters `StepCandidate`s before sending to verifiers |
+| `ampp/agents/strategy_controller.py` | Shannon-entropy-based strategy switching; prevents getting stuck |
+| `ampp/agents/conjecture_miner.py` | Enumerates small cases, detects invariants, suggests conjectural bounds |
+| `ampp/verifiers/` | V1–V5 verifiers (see cascade section) |
+| `ampp/worker.py` | Main JSON-RPC event loop; routes requests to the correct component |
 
-Every proposer emits structured `StepCandidate` objects. No prose is accepted. Candidates with missing fields are silently discarded.
+**Proposer strategies:**
 
-### The Rubric Agent
+| Proposer | Mathematical technique |
+|----------|----------------------|
+| `InductionProposer` | Base case + inductive step |
+| `ExtremalProposer` | Extremal / minimal-counterexample principle |
+| `DoubleCountingProposer` | Counting in two ways |
+| `ConstructiveProposer` | Explicit construction / algorithm |
+| `AlgebraicNormalizationProposer` | Algebraic manipulation and canonical forms |
 
-Before any candidate reaches the verification cascade, the Rubric Agent applies four mandatory gates:
+LLM integration is through `_llm_generate()` in `specializations.py`. If `ANTHROPIC_API_KEY` is set, Claude is used (claude-opus-4-5). If only `OPENAI_API_KEY` is set, GPT-4o is used. The pipeline runs without any API key (proposers return empty candidates; useful for testing infrastructure).
 
-1. **Checkability** — the candidate must include a concrete, executable verification plan.
-2. **Locality** — the step must be a micro-lemma, not a multi-claim leap.
-3. **Dependency Hygiene** — all dependencies must point to already-verified claims.
-4. **Counterexample Risk Control** — falsifiable claims must include small-case test plans.
+### IPC Bridge
 
-Failure on any gate means immediate rejection. Candidates that pass are additionally scored on complexity reduction, novelty, and Lean-friendliness.
+The Rust `PythonWorker` spawns the Python worker script as a subprocess and communicates via **newline-delimited JSON-RPC** over `stdin`/`stdout`. Logging from Python is directed to `stderr` so it never contaminates the message channel.
 
-After verification (pass or fail), the Rubric Agent runs a postmortem that adjusts strategy weights, tracks failure patterns by verifier stage, and tightens constraints for future iterations.
+```
+Rust  ──[JSON request\n]──▶  Python worker
+Rust  ◀──[JSON response\n]── Python worker
+```
+
+Each message has `request_id` (echoed in response), `stage`, `candidate_json`, and `context`.
 
 ---
 
-## Verification Stack
+## Verification Cascade
 
-Every claim passes through an escalating cascade. Failure at any layer halts progression and rejects the claim.
+Claims must pass all applicable layers in order. Any failure stops the cascade for that candidate and the claim is permanently rejected.
 
-### V0 --- Structural Checks
+```
+V0  Structural (Rust, in-process)
+    │  Schema completeness, symbol validation, dependency purity,
+    │  quantifier scope, small-case test requirement
+    ↓
+V1  Counterexample Search (Python)
+    │  Exhaustive enumeration (small N), seeded random property testing,
+    │  boundary testing. Counterexample found → claim rejected + witness stored
+    ↓
+V2  Symbolic Verification (SymPy)
+    │  Identity simplification, canonicalization, inequality normalization,
+    │  logical equivalence. Mismatch → reject.
+    ↓
+V3  SMT Verification (Z3)
+    │  Translate claim to constraint form; check negation unsatisfiable.
+    │  Model found → counterexample + reject.
+    ↓
+V4  First-Order ATP (Vampire / E)
+    │  Translate to FOL via TPTP; invoke ATP.
+    │  Theorem proved → verified fragment. Counter-sat → reject.
+    ↓
+V5  Lean 4 Proof Checker
+       Compile generated Lean lemma. Success → formally verified.
+       Failure → Lemma Minimizer → retry → reject if still failing.
+```
 
-Symbol validation, domain consistency, quantifier scope analysis, and dependency purity verification. This layer runs on every candidate unconditionally.
+**Two-phase commit:** only after all layers pass does the claim transition `proposed → verified` and the Lean artifact is committed to the proof store.
 
-### V1 --- Counterexample Search
+**Conservative default:** if a solver is unavailable (e.g., Lean not installed), that stage passes conservatively rather than blocking the pipeline.
 
-Exhaustive enumeration for small parameter values, random property testing with configurable seeds, and boundary case analysis. If a counterexample is found, the witness is stored and the claim is rejected.
+---
 
-### V2 --- Symbolic Verification (SymPy)
+## Proof Loop
 
-Identity simplification, expression canonicalization, inequality normalization, and logical equivalence checking through symbolic computation.
+```
+1.  Normalise problem → FormalSpec
+2.  Create root Claim (Theorem)
+3.  Initialise beam (4 branches × different strategies)
+4.  For each iteration:
+    a.  For each active beam branch:
+        i.   Pick highest-priority Subgoal
+        ii.  Request StepCandidates from Proposer Ensemble
+        iii. RubricAgent scores and filters candidates
+        iv.  Run VerificationCascade on each candidate
+        v.   On Verified: commit claim, resolve subgoal, record progress
+        vi.  On Rejected: store attempt, extract witness pattern
+    b.  StrategyController: switch strategy if stuck (entropy / failure patterns)
+    c.  BeamSearchManager: prune stale branches, enforce diversity
+5.  Terminate when:
+    •  Root theorem verified (Lean compile succeeds), OR
+    •  Finite exhaustive verification complete, OR
+    •  Max iterations reached (explicit incomplete declaration)
+6.  Write output artefacts
+```
 
-### V3 --- SMT Verification (Z3)
+---
 
-Translates claims into constraint form and checks satisfiability of the negation. If the negation is unsatisfiable, the claim fragment is verified. If Z3 finds a satisfying model, it constitutes a counterexample.
+## Quick Start
 
-### V4 --- First-Order ATP (Vampire / E)
+```bash
+# 1. Build the CLI
+cargo build --release
 
-Translates to TPTP format for first-order automated theorem proving. Proof found means verified fragment. Counter-satisfiable means rejection.
+# 2. Install the Python worker
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
 
-### V5 --- Lean 4 Proof Checker
+# 3. (Optional) Set an LLM key for full proposer power
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY
 
-The final authority. Generates a Lean 4 lemma and compiles it. If compilation succeeds, the claim is verified. If it fails, the Lemma Minimizer attempts decomposition and retry. Lean compilation is mandatory for full verification.
+# 4. Run
+./target/release/ampp \
+  --problem "For all integers n >= 1, 1+2+...+n = n*(n+1)/2" \
+  --python .venv/bin/python3 \
+  --worker ampp/worker.py
+```
 
-### Two-Phase Commit
-
-After the cascade, the commit engine executes atomically:
-
-- **Phase 1 (Prepare):** Validate all artifacts, compute a deterministic commit hash over the claim and its verification evidence.
-- **Phase 2 (Commit):** Update the proof state. Verified claims get artifacts attached. Rejected claims get attempt records and counterexamples logged.
-
-No partial commits. Rejected claims are permanent.
+Results appear in `output/`. The run manifest at `output/run_manifest.json` records every artefact hash, tool version, and termination condition for full reproducibility.
 
 ---
 
 ## Installation
 
+### Prerequisites
+
+| Tool | Version | Required? |
+|------|---------|-----------|
+| Rust | stable (≥ 1.78) | Yes |
+| Python | ≥ 3.11 | Yes |
+| Lean 4 | any | No (V5 skips gracefully) |
+| Vampire / E | any | No (V4 skips gracefully) |
+| OpenAI or Anthropic key | — | No (proposers return empty without key) |
+
+### Step-by-step
+
 ```bash
-git clone https://github.com/yourusername/ampp.git
+# Clone
+git clone https://github.com/your-username/ampp.git
 cd ampp
-pip install -e .
+
+# Rust — builds all three crates, produces ./target/release/ampp
+cargo build --release
+
+# Python (editable install with all deps)
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+
+# Copy and edit environment variables
+cp .env.example .env
+# edit .env with your API keys
 ```
-
-**Python 3.11+** is required.
-
-### External Tools
-
-The core pipeline runs with Python dependencies alone (SymPy, Z3). For the full verification stack:
-
-| Tool | Layer | Installation |
-|---|---|---|
-| Lean 4 | V5 | [elan toolchain manager](https://leanprover.github.io/lean4/doc/setup.html) |
-| Vampire | V4 | [vprover.github.io](https://vprover.github.io/) |
-| E Prover | V4 | [dhbw-stuttgart.de/~sschulz/E](https://wwwlehre.dhbw-stuttgart.de/~sschulz/E/E.html) |
-
-V4 and V5 are optional. The pipeline degrades gracefully — it will skip layers whose tools are unavailable and verify with whatever is present.
 
 ---
 
-## Usage
+## CLI Reference
 
-### Command Line
+```
+ampp [OPTIONS] --problem <PROBLEM>
+
+Options:
+  -p, --problem <PROBLEM>    Problem statement (natural language or LaTeX)
+  -d, --db <DB>              SQLite state file  [default: ampp_state.db]
+  -o, --output <OUTPUT>      Output artefacts directory  [default: output]
+      --python <PYTHON>      Python interpreter path  [default: python3]
+      --worker <WORKER>      Python worker script  [default: ampp/worker.py]
+      --seed <SEED>          Random seed for reproducibility  [default: 42]
+      --max-iter <MAX_ITER>  Maximum proof iterations  [default: 200]
+  -h, --help                 Print help
+  -V, --version              Print version
+```
+
+### Examples
 
 ```bash
-# Prove a statement directly
-ampp "For all n >= 1, the sum 1+2+...+n = n(n+1)/2" --problem-id gauss_sum
+# Simple identity
+ampp -p "For all n >= 1, the sum of the first n positive integers is n(n+1)/2"
 
-# Read from a file
-ampp problem.txt --output-dir results --max-iterations 100
+# Combinatorics
+ampp -p "Prove that in any group of 6 people, there exist 3 mutual acquaintances or 3 mutual strangers (Ramsey R(3,3)=6)"
 
-# Full options
-ampp "..." \
-  --problem-id my_theorem \
-  --output-dir output \
-  --max-iterations 200 \
-  --max-time 3600 \
-  --seed 42 \
-  --lean-project ./my-lean-project \
-  --verbose
+# Reproducible run with explicit seed
+ampp -p "Every even integer greater than 2 is the sum of at most 4 primes" \
+     --seed 1337 --max-iter 500
+
+# Custom Python interpreter (e.g., in a venv)
+ampp -p "..." \
+     --python /path/to/.venv/bin/python3 \
+     --worker /path/to/ampp/worker.py \
+     --output /tmp/proof_run
 ```
 
-### Python API
+---
 
-```python
-from ampp.config import PipelineConfig
-from ampp.main import Pipeline
+## Configuration & Environment Variables
 
-config = PipelineConfig(
-    max_iterations=100,
-    max_wall_time_seconds=1800,
-)
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `OPENAI_API_KEY` | GPT-4o for proposer ensemble | — |
+| `ANTHROPIC_API_KEY` | Claude for proposer ensemble (takes priority) | — |
+| `LEAN_PATH` | Path to `lean` binary | `lean` (in `$PATH`) |
+| `VAMPIRE_PATH` | Path to `vampire` binary | `vampire` |
+| `E_PROVER_PATH` | Path to `eprover` binary | `eprover` |
+| `RUST_LOG` | Rust tracing filter | `ampp=info` |
 
-pipeline = Pipeline(config)
-artifacts = pipeline.run(
-    problem_id="gauss_sum",
-    raw_statement="Prove that for all n >= 1, 1+2+...+n = n(n+1)/2",
-)
+See [.env.example](.env.example) for a ready-to-copy template.
 
-for name, path in artifacts.items():
-    print(f"  {name}: {path}")
-```
+---
 
-### Output Artifacts
+## Output Artefacts
 
-Every run produces a complete, self-contained artifact set:
+Every run produces the following in `--output` (default: `output/`):
 
 | File | Contents |
-|---|---|
-| `solution.lean` | Verified Lean 4 proof that compiles standalone |
-| `solution.md` | Human-readable proof narrative with claim graph |
-| `proof_graph.json` | Full dependency graph of all claims and their relationships |
-| `verification_log.json` | Every verification check across all cascade layers |
-| `rejected_claims.json` | All rejected claims, failure reasons, and counterexample witnesses |
-| `run_manifest.json` | Reproducibility manifest: config, seeds, tool versions, hashes |
+|------|---------|
+| `run_manifest.json` | Run ID, problem fingerprint, tool versions, random seed, termination condition, beam summary, SHA-256 hashes of all artefacts |
+| `solution.lean` | Lean 4 source compiled by V5; stub if proof incomplete |
+| `solution.md` | Human-readable proof sketch with problem statement and result |
+| `proof_graph.json` | All verified claims as a dependency DAG |
+| `verification_log.json` | Full attempt log — every candidate, every verifier stage, every rejection reason |
+| `rejected_claims.json` | All permanently rejected claims with witnesses |
 
-No solution is accepted without its artifact set. The manifest contains everything needed to reproduce the run deterministically.
+Runs are **fully reproducible**: re-run with the same `--seed`, `--problem`, and tool versions to get byte-for-byte identical artefacts.
 
 ---
 
-## Design Principles
+## Testing
 
-AMPP is built on five non-negotiable principles:
+### Rust (22 tests — unit + integration)
 
-**1. Two-Phase Commit.** Every claim transition (proposed to verified, proposed to rejected) is an atomic operation with full artifact logging. There are no partial updates.
+```bash
+cargo test          # all tests
+cargo test --lib    # unit tests only (ampp-core)
+cargo test --test integration_tests   # integration suite
+```
 
-**2. Dependency Purity.** A claim can only depend on claims that are already verified. No circular dependencies. No forward references. The proof state forms a clean DAG at all times.
+### Python (79 tests)
 
-**3. Deterministic Verification Supremacy.** The formal proof checker is the final authority. No amount of LLM confidence, plausibility, or heuristic reasoning overrides a failed Lean compilation. Truth is binary.
+```bash
+# All tests
+pytest tests/python/ -v
 
-**4. Reproducible Execution.** Fixed random seeds, pinned tool versions, hashed inputs and outputs, deterministic solver invocations. Every run can be replayed exactly.
+# With coverage
+pytest tests/python/ --cov=ampp --cov-report=html
 
-**5. Progress-Monotonic Iteration.** Every iteration must achieve at least one of: add a verified claim, reduce the subgoal count, shrink difficulty estimates, eliminate a branch via counterexample, or produce a tighter canonical form. If none of these occur, a strategy switch is forced.
+# Specific module
+pytest tests/python/test_rubric_agent.py -v
+pytest tests/python/test_v3_z3.py -v
+```
+
+### Test summary
+
+| Suite | Tests | Covers |
+|-------|-------|--------|
+| `test_schemas` | 13 | Pydantic validation, JSON roundtrips, `FormalSpec.fingerprint()` |
+| `test_v1_counterexample` | 6 | Exhaustive enumeration, seeded random, boundary detection |
+| `test_v2_sympy` | 7 | Identity simplification, inequality normalization, conservative pass |
+| `test_v3_z3` | 4 | SMT negation (UNSAT = verified), graceful absence handling |
+| `test_rubric_agent` | 9 | 7-dimension scoring, hard gates, strategy weight updates, termination guard |
+| `test_normalizer` | 9 | Canonicalization, LaTeX replacement, stable fingerprints |
+| `test_proposer_and_strategy` | 13 | Ensemble dedup, weight updates, strategy switching, Shannon entropy |
+| `test_conjecture_miner` | 3 | Pattern detection, deduplication |
+| `test_worker` | 8 | JSON-RPC handler routing, exception safety, request ID echoing |
+| **Rust unit** | **10** | Store CRUD, V0 structural checker, beam search, planner |
+| **Rust integration** | **12** | Full cascade lifecycle, artifact manifests, two-phase commit |
+| **Total** | **101** | |
 
 ---
 
@@ -265,104 +378,117 @@ AMPP is built on five non-negotiable principles:
 
 ```
 ampp/
-|-- main.py                          Pipeline orchestrator and CLI entry point
-|-- config.py                        All configuration, enumerations, and defaults
-|
-|-- models/
-|   |-- state.py                     Frozen dataclasses: Claim, Subgoal, Counterexample, Attempt
-|   |-- step_candidate.py            StepCandidate schema with validation
-|   +-- proof_state.py               Append-only versioned proof state container
-|
-|-- normalizer/
-|   +-- normalizer.py                Raw problem text to FormalSpec conversion
-|
-|-- planner/
-|   +-- planner.py                   Subgoal DAG generation and frontier computation
-|
-|-- proposers/
-|   |-- base.py                      Abstract base for all proposers
-|   |-- induction.py                 Standard and strong induction
-|   |-- extremal.py                  Extremal principle
-|   |-- invariant.py                 Invariant and monovariant detection
-|   |-- counting.py                  Double counting arguments
-|   |-- constructive.py              Direct construction
-|   |-- contradiction.py             Proof by contradiction
-|   |-- algebraic.py                 Algebraic normalization and rewriting
-|   |-- graph_translation.py         Graph-theoretic reinterpretation
-|   |-- counterexample_search.py     Minimal counterexample method
-|   +-- ensemble.py                  Parallel proposer coordination with strategy weights
-|
-|-- verification/
-|   |-- v0_structural.py             Symbol, scope, and dependency checks
-|   |-- v1_counterexample.py         Exhaustive and random counterexample search
-|   |-- v2_symbolic.py               SymPy-based symbolic verification
-|   |-- v3_smt.py                    Z3 SMT solver integration
-|   |-- v4_atp.py                    Vampire/E automated theorem proving
-|   |-- v5_lean.py                   Lean 4 compilation and proof checking
-|   +-- cascade.py                   Orchestrates V0 through V5 in sequence
-|
-|-- commit/
-|   +-- two_phase.py                 Atomic two-phase commit with hash logging
-|
-|-- engines/
-|   |-- lemma_minimizer.py           Lean failure decomposition and retry
-|   |-- counterexample_refiner.py    Learns from counterexamples to refine claims
-|   +-- conjecture_miner.py          Small-instance enumeration and pattern discovery
-|
-|-- controllers/
-|   |-- beam_manager.py              Parallel proof state management (3-6 beams)
-|   |-- strategy_controller.py       Dynamic strategy switching on stall detection
-|   |-- progress_monitor.py          Progress-monotonic invariant enforcement
-|   +-- rubric_agent.py              Quality gating, scoring, and policy updates
-|
-|-- utils/
-|   |-- hashing.py                   Deterministic SHA-256 hashing utilities
-|   |-- pipeline_logging.py          Structured JSONL event logging
-|   +-- sandbox.py                   Sandboxed subprocess execution
-|
-+-- artifacts/
-    +-- generator.py                 Output artifact generation (all six files)
+├── Cargo.toml                  # Rust workspace root
+├── pyproject.toml              # Python package
+├── .env.example                # Environment variable template
+├── .gitignore
+├── LICENSE
+│
+├── crates/
+│   ├── ampp-core/              # Core library crate
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── store.rs        # SQLite ProofStore (append-only)
+│   │       ├── state/          # Claim, Definition, Subgoal, Attempt, StepCandidate
+│   │       ├── verification/   # V0 structural check + cascade orchestrator
+│   │       ├── pipeline/       # Normalizer, Planner, BeamSearchManager
+│   │       └── artifacts/      # RunManifest, ArtifactSet
+│   │
+│   ├── ampp-ipc/               # Python subprocess bridge
+│   │   └── src/python_bridge.rs
+│   │
+│   └── ampp-cli/               # Binary entry point
+│       └── src/main.rs         # Proof loop, CLI, artefact writer
+│
+├── ampp/                       # Python package
+│   ├── schemas.py              # Pydantic state models (IPC contract)
+│   ├── normalizer.py           # Problem text → FormalSpec
+│   ├── worker.py               # JSON-RPC event loop
+│   ├── proposers/
+│   │   ├── base.py             # BaseProposer ABC
+│   │   ├── specializations.py  # 5 strategy proposers (LLM-backed)
+│   │   └── ensemble.py         # Fan-out, dedup, rubric triage, ranking
+│   ├── agents/
+│   │   ├── rubric_agent.py     # 7-dimension quality gate
+│   │   ├── conjecture_miner.py # Small-case enumeration + pattern mining
+│   │   └── strategy_controller.py  # Entropy-based strategy switching
+│   └── verifiers/
+│       ├── v1_counterexample.py
+│       ├── v2_sympy.py
+│       ├── v3_z3.py
+│       ├── v4_atp.py
+│       └── v5_lean.py
+│
+└── tests/
+    └── python/
+        ├── conftest.py
+        ├── test_schemas.py
+        ├── test_normalizer.py
+        ├── test_v1_counterexample.py
+        ├── test_v2_sympy.py
+        ├── test_v3_z3.py
+        ├── test_rubric_agent.py
+        ├── test_proposer_and_strategy.py
+        ├── test_conjecture_miner.py
+        └── test_worker.py
 ```
 
 ---
 
-## Configuration
+## Design Philosophy
 
-All behavior is controlled through frozen dataclasses in `config.py`:
+AMPP is built around five non-negotiable principles drawn from the architecture specification:
 
-```python
-from ampp.config import PipelineConfig, VerifierConfig, BeamConfig
+### 1. Deterministic Verification Supremacy
 
-config = PipelineConfig(
-    max_iterations=200,           # hard iteration cap
-    max_wall_time_seconds=3600,   # hard wall-clock cap
-    global_seed=42,               # deterministic reproducibility
-    verifier=VerifierConfig(
-        max_exhaustive_n=12,      # V1: enumerate up to n=12
-        z3_timeout_ms=30_000,     # V3: 30s Z3 timeout
-        lean_timeout_seconds=120, # V5: 2min Lean compilation
-    ),
-    beam=BeamConfig(
-        min_beams=3,              # minimum concurrent proof states
-        max_beams=6,              # maximum concurrent proof states
-    ),
-)
-```
+LLMs generate hypotheses. Deterministic systems establish truth. No statement moves to the verified state based on confidence, plausibility, or heuristic reasoning.
+
+### 2. Two-Phase Commit
+
+Every claim starts as `proposed`. It becomes `verified` only after passing the full verification cascade. Rejection is permanent and immutable.
+
+### 3. Strict Dependency Purity
+
+A claim may only depend on already-verified claims. The V0 structural checker enforces this before any solver is invoked.
+
+### 4. Reproducible Execution
+
+Fixed random seeds, pinned tool versions, SHA-256 hashes of all inputs and outputs, full solver logs. Any run can be replayed exactly.
+
+### 5. Progress-Monotonic Iteration
+
+Each iteration must produce at least one of: a new verified claim, a subgoal reduction, a tighter canonical form, or a branch elimination. Otherwise the strategy controller forces a switch.
+
+### Rubric Agent
+
+The `RubricAgent` scores every `StepCandidate` on seven dimensions before exposing it to solvers:
+
+| Dimension | Points | Gate |
+|-----------|--------|------|
+| Checkability | 40 | Hard — must have executable verification plan |
+| Locality | 20 | Hard — one micro-lemma per candidate |
+| Dependency hygiene | 20 | Hard — only verified dependencies |
+| Counterexample risk | 10 | Hard — test plan required when domain admits falsification |
+| Complexity reduction | 5 | Scored |
+| Novelty / non-repetition | 3 | Scored |
+| Lean-friendliness | 2 | Scored |
+
+**Pass threshold: 70 / 100.** Any hard gate failure → immediate reject, no solver time wasted.
 
 ---
 
-## Termination
+## Contributing
 
-The pipeline terminates under exactly three conditions:
+1. Fork and create a feature branch.
+2. Run `cargo fmt --all && cargo clippy --all-targets -- -D warnings` before committing Rust code.
+3. Run `ruff check ampp/ tests/` before committing Python code.
+4. Ensure `cargo test --all` and `pytest tests/python/` both pass at 100%.
+5. Open a PR against `main`.
 
-1. **Theorem verified.** The top-level theorem has been verified through the full cascade including Lean compilation.
-2. **Resource exhaustion.** The iteration or wall-time limit has been reached. All progress is preserved in artifacts.
-3. **Explicit incompleteness.** The system declares incompleteness and produces a full artifact log documenting exactly what was proved, what failed, and what remains open.
-
-In all cases, the complete artifact set is generated before exit.
+CI enforces all of the above automatically on every push.
 
 ---
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Naitik Gupta
