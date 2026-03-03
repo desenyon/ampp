@@ -23,19 +23,19 @@ from ampp.schemas import (
 
 
 def make_candidate(**overrides) -> StepCandidate:
-    defaults = dict(
-        id=str(uuid.uuid4()),
-        subgoal_id="sg-1",
-        action_type=ActionType.INTRODUCE_LEMMA,
-        new_claims=[NewClaimSpec(statement="2 + 2 = 4")],
-        dependencies=[],
-        verification_plan=VerificationPlan(stages=["V0", "V1", "V5"]),
-        small_case_tests=[],
-        lean_stub="theorem t : 2 + 2 = 4 := by norm_num",
-        strategy_family=StrategyFamily.ALGEBRAIC_NORMALIZATION,
-        candidate_hash=hashlib.sha256(b"test").hexdigest(),
-        branch_id="branch-1",
-    )
+    defaults = {
+        "id": str(uuid.uuid4()),
+        "subgoal_id": "sg-1",
+        "action_type": ActionType.INTRODUCE_LEMMA,
+        "new_claims": [NewClaimSpec(statement="2 + 2 = 4")],
+        "dependencies": [],
+        "verification_plan": VerificationPlan(stages=["V0", "V1", "V5"]),
+        "small_case_tests": [],
+        "lean_stub": "theorem t : 2 + 2 = 4 := by norm_num",
+        "strategy_family": StrategyFamily.ALGEBRAIC_NORMALIZATION,
+        "candidate_hash": hashlib.sha256(b"test").hexdigest(),
+        "branch_id": "branch-1",
+    }
     defaults.update(overrides)
     return StepCandidate(**defaults)
 
