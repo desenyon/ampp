@@ -74,11 +74,14 @@ class ATPVerifier:
             tmp_path = fh.name
 
         try:
+            if self._binary is None:
+                return None, {"atp_result": "Error", "message": "ATP binary not available"}
+            
             flags = ["--cpu-limit", str(ATP_TIMEOUT_SEC)]
             if self._binary in ("eprover", "e"):
                 flags = ["--cpu-limit", str(ATP_TIMEOUT_SEC), "--auto"]
             result = subprocess.run(
-                [self._binary, *flags, tmp_path],
+                [self._binary] + flags + [tmp_path],
                 capture_output=True,
                 text=True,
                 timeout=ATP_TIMEOUT_SEC + 5,
