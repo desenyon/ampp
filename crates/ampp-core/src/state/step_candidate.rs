@@ -111,6 +111,7 @@ impl StepCandidate {
         hex::encode(hasher.finalize())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         subgoal_id: impl Into<String>,
         action_type: ActionType,

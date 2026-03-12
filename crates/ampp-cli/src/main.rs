@@ -304,6 +304,7 @@ fn write_artifacts(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_manifest(
     run_id: String,
     started_at: chrono::DateTime<Utc>,

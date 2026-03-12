@@ -28,7 +28,7 @@ impl<'a> Planner<'a> {
             0.8,
             vec![],
             "direct_proof",
-            &format!("Prove: {}", spec.target),
+            format!("Prove: {}", spec.target),
             branch_id,
         );
 
@@ -42,7 +42,7 @@ impl<'a> Planner<'a> {
                 0.2,
                 vec![],
                 "direct_proof",
-                &format!("Verify edge case: {edge}"),
+                format!("Verify edge case: {edge}"),
                 branch_id,
             );
             let edge_id = edge_sg.id.clone();

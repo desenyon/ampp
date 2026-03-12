@@ -236,7 +236,7 @@ mod integration {
         let ids = planner
             .generate_initial_subgoals(&spec, "root-claim-id", branch)
             .unwrap();
-        assert!(ids.len() >= 1); // at least the top-level target
+        assert!(!ids.is_empty()); // at least the top-level target
 
         // Edge case subgoals + top-level = 3 total
         assert_eq!(ids.len(), 3);
