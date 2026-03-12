@@ -64,5 +64,23 @@ Thumbs.db
 !.env.example
 secrets/
 
+# ── GitHub internal / AI instruction files ────────────────────────────────────
+.github/skills/
+CLAUDE.md
+.agent.md
+.instructions.md
+AGENTS.md
+
+# ── Paper / LaTeX build artefacts ─────────────────────────────────────────────
+paper/*.pdf
+paper/*.aux
+paper/*.log
+paper/*.bbl
+paper/*.blg
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
 # ── Misc / repo-specific ───────────────────────────────────────────────────────
 logos/
