@@ -88,16 +88,21 @@ jobs:
             - name: Package (Unix)
               if: runner.os != 'Windows'
               run: |
-                  cp target/${{ matrix.target }}/release/${{ matrix.binary }} ampp
-                  tar -czf ${{ matrix.asset_name }} ampp README.md LICENSE
-                  rm ampp
+                  # Stage into a temp dir to avoid clashing with the ampp/ Python package directory
+                  mkdir -p _pkg
+                  cp target/${{ matrix.target }}/release/${{ matrix.binary }} _pkg/ampp
+                  cp README.md LICENSE _pkg/
+                  tar -czf ${{ matrix.asset_name }} -C _pkg .
+                  rm -rf _pkg
 
             - name: Package (Windows)
               if: runner.os == 'Windows'
               run: |
-                  Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary }}" ampp.exe
-                  Compress-Archive -Path ampp.exe, README.md, LICENSE -DestinationPath ${{ matrix.asset_name }}
-                  Remove-Item ampp.exe
+                  New-Item -ItemType Directory -Force -Path _pkg | Out-Null
+                  Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary }}" _pkg\ampp.exe
+                  Copy-Item README.md, LICENSE _pkg\
+                  Compress-Archive -Path _pkg\* -DestinationPath ${{ matrix.asset_name }}
+                  Remove-Item -Recurse -Force _pkg
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4

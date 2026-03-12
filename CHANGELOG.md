@@ -10,6 +10,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.1] — 2026-03-12
+
+### Fixed
+- Release packaging: copy binary to a temp dir before archiving to avoid clash with the `ampp/` Python package directory ([`rm ampp: is a directory`](https://github.com/desenyon/ampp/actions)).
+- Quantifier key `for_all` → `forall` to match Rust serde `rename_all = "lowercase"`.
+- Windows packager updated to use temp dir consistently.
+
+---
+
 ## [0.1.0] — 2026-03-12
 
 ### Added
@@ -20,5 +29,6 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Integration smoke test with artifact verification.
 - MIT licence, `CONTRIBUTING.md`, issue templates, and PR template.
 
-[Unreleased]: https://github.com/desenyon/ampp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/desenyon/ampp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/desenyon/ampp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/desenyon/ampp/releases/tag/v0.1.0

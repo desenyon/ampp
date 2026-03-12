@@ -1,6 +1,6 @@
 [project]
 name = "ampp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Autonomous Mathematical Proof Pipeline – Python components"
 readme = "README.md"
 license = { text = "MIT" }
