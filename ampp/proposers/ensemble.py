@@ -1,4 +1,4 @@
-"""ProposerEnsemble — runs all strategy proposers and returns ranked candidates.
+"""ProposerEnsemble — runs all 10 strategy proposers and returns ranked candidates.
 
 The ensemble:
 1. Fans out to all proposers using the current strategy weights.
@@ -15,9 +15,14 @@ from ampp.proposers.base import BaseProposer
 from ampp.proposers.specializations import (
     AlgebraicNormalizationProposer,
     ConstructiveProposer,
+    ContradictionProposer,
     DoubleCountingProposer,
     ExtremalProposer,
+    GraphTranslationProposer,
     InductionProposer,
+    InvariantMonovariantProposer,
+    MinimalCounterexampleProposer,
+    StrongInductionProposer,
 )
 from ampp.schemas import StepCandidate, StrategyFamily
 
@@ -25,15 +30,20 @@ logger = logging.getLogger(__name__)
 
 
 class ProposerEnsemble:
-    """Coordinates all proposer specialisations."""
+    """Coordinates all proposer specialisations (all 10 strategy families)."""
 
     def __init__(self, rubric_agent: Any = None) -> None:
         self._proposers: list[BaseProposer] = [
             InductionProposer(),
+            StrongInductionProposer(),
+            MinimalCounterexampleProposer(),
             ExtremalProposer(),
+            InvariantMonovariantProposer(),
+            AlgebraicNormalizationProposer(),
             DoubleCountingProposer(),
             ConstructiveProposer(),
-            AlgebraicNormalizationProposer(),
+            GraphTranslationProposer(),
+            ContradictionProposer(),
         ]
         self._rubric = rubric_agent
         # Weight vector over strategy families (updated by RubricAgent)
