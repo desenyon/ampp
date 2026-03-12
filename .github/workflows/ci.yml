@@ -13,11 +13,10 @@ env:
 jobs:
   # ── Rust ─────────────────────────────────────────────────────────────────────
   rust:
-    name: Rust (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Rust (macos-latest)
+    runs-on: macos-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
         toolchain: [stable]
 
     steps:
@@ -36,8 +35,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos-cargo-
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -51,15 +50,7 @@ jobs:
       - name: Test
         run: cargo test --all
 
-      - name: Upload binary (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ampp-linux-x86_64
-          path: target/release/ampp
-
       - name: Upload binary (macOS)
-        if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: ampp-macos-arm64
@@ -68,7 +59,7 @@ jobs:
   # ── Python ───────────────────────────────────────────────────────────────────
   python:
     name: Python (${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -107,16 +98,16 @@ jobs:
   # ── Integration smoke test ───────────────────────────────────────────────────
   integration:
     name: Integration smoke test
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: [rust, python]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Linux binary
+      - name: Download macOS binary
         uses: actions/download-artifact@v4
         with:
-          name: ampp-linux-x86_64
+          name: ampp-macos-arm64
           path: .
 
       - name: Set up Python
