@@ -1,0 +1,201 @@
+name: Release
+
+# Triggered by pushing a version tag: git tag v0.1.0 && git push --tags
+on:
+    push:
+        tags:
+            - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+    RUST_BACKTRACE: 1
+    CARGO_TERM_COLOR: always
+
+# ── Permissions needed by softprops/action-gh-release ──────────────────────
+permissions:
+    contents: write
+
+jobs:
+    # ── Build native binaries ─────────────────────────────────────────────────
+    build-binaries:
+        name: Build ${{ matrix.target }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    # macOS universal (tested in CI already)
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      binary: ampp
+                      asset_name: ampp-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
+
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      binary: ampp
+                      asset_name: ampp-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
+
+                    # Linux x86_64 (musl for maximum portability)
+                    - os: ubuntu-22.04
+                      target: x86_64-unknown-linux-musl
+                      binary: ampp
+                      asset_name: ampp-${{ github.ref_name }}-x86_64-unknown-linux-musl.tar.gz
+
+                    # Linux arm64
+                    - os: ubuntu-22.04
+                      target: aarch64-unknown-linux-musl
+                      binary: ampp
+                      asset_name: ampp-${{ github.ref_name }}-aarch64-unknown-linux-musl.tar.gz
+
+                    # Windows x86_64
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      binary: ampp.exe
+                      asset_name: ampp-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust stable + target
+              uses: dtolnay/rust-toolchain@v1
+              with:
+                  toolchain: stable
+                  targets: ${{ matrix.target }}
+
+            - name: Install musl tools (Linux cross)
+              if: contains(matrix.target, 'musl')
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y musl-tools
+                  # arm64 musl cross-compiler
+                  if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+                    sudo apt-get install -y gcc-aarch64-linux-gnu
+                    echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+                  fi
+
+            - name: Cache cargo
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target/
+                  key: release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: release-${{ matrix.target }}-
+
+            - name: Build release binary
+              run: cargo build --release --target ${{ matrix.target }}
+
+            - name: Package (Unix)
+              if: runner.os != 'Windows'
+              run: |
+                  cp target/${{ matrix.target }}/release/${{ matrix.binary }} ampp
+                  tar -czf ${{ matrix.asset_name }} ampp README.md LICENSE
+                  rm ampp
+
+            - name: Package (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary }}" ampp.exe
+                  Compress-Archive -Path ampp.exe, README.md, LICENSE -DestinationPath ${{ matrix.asset_name }}
+                  Remove-Item ampp.exe
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binary-${{ matrix.target }}
+                  path: ${{ matrix.asset_name }}
+                  retention-days: 1
+
+    # ── Build Python package (sdist + wheel) ──────────────────────────────────
+    build-python:
+        name: Python sdist + wheel
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+
+            - name: Install build tools
+              run: pip install build
+
+            - name: Build
+              run: python -m build --sdist --wheel --outdir dist/
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: python-dist
+                  path: dist/
+                  retention-days: 1
+
+    # ── Create GitHub Release + attach assets ─────────────────────────────────
+    github-release:
+        name: GitHub Release
+        runs-on: ubuntu-22.04
+        needs: [build-binaries, build-python]
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0 # needed for changelog generation
+
+            - name: Download all build artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts/
+
+            - name: Flatten artifact dirs
+              run: |
+                  mkdir -p release-assets
+                  find artifacts/ -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.whl" -o -name "*.tar.gz" \) \
+                    -exec cp {} release-assets/ \;
+
+            - name: Generate changelog since last tag
+              id: changelog
+              run: |
+                  PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | sed -n '2p')
+                  if [ -z "$PREV_TAG" ]; then
+                    RANGE="HEAD"
+                  else
+                    RANGE="${PREV_TAG}..HEAD"
+                  fi
+                  echo "## What's Changed" > notes.md
+                  echo "" >> notes.md
+                  git log $RANGE --pretty=format:"- %s (%h)" -- >> notes.md || true
+                  echo "" >> notes.md
+                  echo "" >> notes.md
+                  echo "**Full changelog:** https://github.com/desenyon/ampp/compare/${PREV_TAG}...${{ github.ref_name }}" >> notes.md
+                  cat notes.md
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  name: "AMPP ${{ github.ref_name }}"
+                  body_path: notes.md
+                  draft: false
+                  prerelease: ${{ contains(github.ref_name, '-') }} # v1.0.0-rc.1 → pre-release
+                  files: release-assets/*
+
+    # ── Publish to PyPI ───────────────────────────────────────────────────────
+    publish-pypi:
+        name: Publish to PyPI
+        runs-on: ubuntu-22.04
+        needs: [github-release]
+        # Only publish on full releases (not pre-releases like v1.0.0-rc.1)
+        if: ${{ !contains(github.ref_name, '-') }}
+        environment:
+            name: pypi
+            url: https://pypi.org/project/ampp/
+        permissions:
+            id-token: write # required for OIDC trusted publishing
+
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  name: python-dist
+                  path: dist/
+
+            - name: Publish to PyPI (OIDC)
+              uses: pypa/gh-action-pypi-publish@release/v1

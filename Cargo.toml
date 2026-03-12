@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Naitik Gupta"]
 license = "MIT"
-repository = "https://github.com/your-username/ampp"
+repository = "https://github.com/desenyon/ampp"
 description = "Autonomous Mathematical Proof Pipeline — Rust + Python"
 keywords = ["mathematics", "proof", "formal-verification", "lean", "ai"]
 

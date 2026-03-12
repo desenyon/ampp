@@ -1,0 +1,11 @@
+# Global code owners — review required on all PRs
+* @desenyon
+
+# Rust crates
+/crates/ @desenyon
+
+# Python package
+/ampp/ @desenyon
+
+# CI / release infrastructure
+/.github/ @desenyon
