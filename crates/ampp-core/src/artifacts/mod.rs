@@ -1,2 +1,2 @@
 pub mod manifest;
-pub use manifest::{RunManifest, ArtifactSet, TerminationCondition, BranchSummary};
+pub use manifest::{ArtifactSet, BranchSummary, RunManifest, TerminationCondition};

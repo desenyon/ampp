@@ -53,10 +53,7 @@ pub struct BeamSearchManager {
 impl BeamSearchManager {
     /// Initialise the beam with one state per initial strategy family.
     pub fn new(initial_strategies: Vec<StrategyFamily>) -> Self {
-        let states: Vec<BeamState> = initial_strategies
-            .into_iter()
-            .map(BeamState::new)
-            .collect();
+        let states: Vec<BeamState> = initial_strategies.into_iter().map(BeamState::new).collect();
         let _width = states.len().clamp(3, 6);
         Self {
             states,

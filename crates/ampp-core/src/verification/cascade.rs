@@ -155,7 +155,8 @@ impl<'a> VerificationCascade<'a> {
                     .to_string();
 
                 self.record_failure(candidate, branch_id, stage_enum.clone(), &reason)?;
-                self.store.register_rejected_hash(&candidate.candidate_hash)?;
+                self.store
+                    .register_rejected_hash(&candidate.candidate_hash)?;
 
                 return Ok(VerificationResult::Rejected {
                     stage: stage_enum.clone(),

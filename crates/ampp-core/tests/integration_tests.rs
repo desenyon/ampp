@@ -30,13 +30,11 @@ mod integration {
                 success_criteria: HashMap::new(),
                 enumeration_bound: None,
             },
-            vec![
-                SmallCaseTest {
-                    description: "n=0".into(),
-                    parameters: serde_json::json!({"n": 0}),
-                    expected: true,
-                },
-            ],
+            vec![SmallCaseTest {
+                description: "n=0".into(),
+                parameters: serde_json::json!({"n": 0}),
+                expected: true,
+            }],
             "theorem t : 2 + 2 = 4 := by norm_num",
             StrategyFamily::AlgebraicNormalization,
             branch_id,

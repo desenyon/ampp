@@ -54,8 +54,7 @@ struct Cli {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ampp=info".parse()?),
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("ampp=info".parse()?),
         )
         .init();
 
@@ -123,7 +122,10 @@ async fn main() -> Result<()> {
             let Some(subgoal) = planner.next_subgoal(branch_id)? else {
                 // No pending subgoals → this branch is done
                 let verified = store.get_verified_claims(branch_id)?;
-                if verified.iter().any(|c| c.proof_hash == root_claim.proof_hash) {
+                if verified
+                    .iter()
+                    .any(|c| c.proof_hash == root_claim.proof_hash)
+                {
                     info!("✓ Target theorem verified on branch {branch_id}");
                     termination = Some(TerminationCondition::TheoremVerified);
                     break 'outer;
@@ -206,7 +208,10 @@ async fn main() -> Result<()> {
 
     let manifest_json = serde_json::to_string_pretty(&manifest)?;
     std::fs::write(artifacts.run_manifest_json(), &manifest_json)?;
-    info!("Run complete. Manifest written to {:?}", artifacts.run_manifest_json());
+    info!(
+        "Run complete. Manifest written to {:?}",
+        artifacts.run_manifest_json()
+    );
 
     Ok(())
 }
@@ -259,7 +264,10 @@ fn write_artifacts(
     // proof_graph.json
     let all_claims = store.get_all_claims_for_branch("root")?; // simplified
     let graph = serde_json::json!({ "claims": all_claims });
-    std::fs::write(artifacts.proof_graph_json(), serde_json::to_string_pretty(&graph)?)?;
+    std::fs::write(
+        artifacts.proof_graph_json(),
+        serde_json::to_string_pretty(&graph)?,
+    )?;
 
     // verification_log.json
     let attempts = store.get_attempts_for_branch("root")?;

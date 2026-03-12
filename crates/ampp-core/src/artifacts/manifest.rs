@@ -1,8 +1,8 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use anyhow::Result;
 
 /// Full run manifest — written to run_manifest.json for reproducibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]

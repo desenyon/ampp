@@ -34,8 +34,10 @@ impl StructuralChecker {
         }
 
         // 3. Symbol validation: definition names used in lean_stub must exist
-        let known_lean_names: HashSet<&str> =
-            known_definitions.iter().map(|d| d.lean_name.as_str()).collect();
+        let known_lean_names: HashSet<&str> = known_definitions
+            .iter()
+            .map(|d| d.lean_name.as_str())
+            .collect();
         // Simple heuristic: check that identifiers starting with uppercase that look
         // like namespaced Lean names (Foo.bar) are in a known namespace.
         for token in lean_token_iter(&candidate.lean_stub) {
@@ -77,7 +79,12 @@ fn lean_token_iter(stub: &str) -> impl Iterator<Item = &str> {
 
 fn looks_like_lean_name(token: &str) -> bool {
     // Namespace-qualified identifiers like `Nat.Prime` or `List.length`
-    token.contains('.') && token.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+    token.contains('.')
+        && token
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -112,16 +119,14 @@ mod tests {
     #[test]
     fn test_valid_candidate_passes() {
         let candidate = dummy_candidate(vec!["V0", "V1", "V5"], vec![]);
-        let result =
-            StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
+        let result = StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
         assert!(result.passed, "{:?}", result.failures);
     }
 
     #[test]
     fn test_unknown_stage_fails() {
         let candidate = dummy_candidate(vec!["V0", "V99"], vec![]);
-        let result =
-            StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
+        let result = StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
         assert!(!result.passed);
         assert!(result.failures.iter().any(|f| f.contains("V99")));
     }
@@ -130,8 +135,7 @@ mod tests {
     fn test_unverified_dependency_fails() {
         let mut candidate = dummy_candidate(vec!["V0", "V5"], vec![]);
         candidate.dependencies.push("nonexistent-claim-id".into());
-        let result =
-            StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
+        let result = StructuralChecker::check(&candidate, &[], &HashSet::new()).unwrap();
         assert!(!result.passed);
         assert!(result
             .failures

@@ -129,9 +129,7 @@ impl ProofStore {
     }
 
     pub fn get_claim(&self, id: &str) -> Result<Option<Claim>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT data FROM claims WHERE id = ?1")?;
+        let mut stmt = self.conn.prepare("SELECT data FROM claims WHERE id = ?1")?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
             let data: String = row.get(0)?;
@@ -142,9 +140,9 @@ impl ProofStore {
     }
 
     pub fn get_verified_claims(&self, branch_id: &str) -> Result<Vec<Claim>> {
-        let mut stmt = self.conn.prepare(
-            r#"SELECT data FROM claims WHERE branch_id=?1 AND status='"verified"'"#,
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare(r#"SELECT data FROM claims WHERE branch_id=?1 AND status='"verified"'"#)?;
         let rows = stmt.query_map(params![branch_id], |row| row.get::<_, String>(0))?;
         rows.map(|r| Ok(serde_json::from_str(&r?)?))
             .collect::<Result<_>>()
@@ -188,10 +186,8 @@ impl ProofStore {
     }
 
     pub fn resolve_subgoal(&self, id: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE subgoals SET resolved=1 WHERE id=?1",
-            params![id],
-        )?;
+        self.conn
+            .execute("UPDATE subgoals SET resolved=1 WHERE id=?1", params![id])?;
         Ok(())
     }
 
