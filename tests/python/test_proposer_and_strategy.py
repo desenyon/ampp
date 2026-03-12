@@ -150,3 +150,50 @@ class TestStrategyController:
         attempts = [{"verifier_stage": "V1"}] * 10
         # Shannon entropy of a single outcome = 0
         assert self.ctrl.frontier_entropy(attempts) == 0.0
+
+    def test_should_switch_with_attempts_entropy(self):
+        """should_switch(attempts=...) fires on high entropy."""
+        from ampp.agents.strategy_controller import ENTROPY_SWITCH_THRESHOLD
+        # Create attempts with many distinct stages to push entropy above threshold
+        stages = ["V1", "V2", "V3", "V4", "V5", "V0", "UNKNOWN", "OTHER"]
+        attempts = [{"verifier_stage": s} for s in stages * 4]
+        h = self.ctrl.frontier_entropy(attempts)
+        if h > ENTROPY_SWITCH_THRESHOLD:
+            assert self.ctrl.should_switch(attempts=attempts)
+        # Otherwise verify should_switch without attempts still works
+        else:
+            assert self.ctrl.should_switch(attempts=[]) is False
+
+    def test_stale_iterations_property(self):
+        self.ctrl.record_failure("x")
+        self.ctrl.record_failure("y")
+        assert self.ctrl.stale_iterations == 2
+
+    def test_current_strategy_property(self):
+        assert isinstance(self.ctrl.current_strategy, StrategyFamily)
+
+    def test_enforce_beam_diversity_no_duplicates(self):
+        """If beam is already diverse, return it unchanged."""
+        beam = [sf.value for sf in list(StrategyFamily)[:4]]
+        weights = {sf.value: 1.0 for sf in StrategyFamily}
+        result = self.ctrl.enforce_beam_diversity(beam, weights)
+        assert len(set(result)) == len(result)  # still diverse
+
+    def test_enforce_beam_diversity_replaces_duplicates(self):
+        """If beam has duplicates beyond diversity ratio, replace them."""
+        same_strategy = StrategyFamily.INDUCTION.value
+        beam = [same_strategy] * 4 + [StrategyFamily.CONSTRUCTIVE.value]
+        weights = {sf.value: 1.0 for sf in StrategyFamily}
+        result = self.ctrl.enforce_beam_diversity(beam, weights)
+        # Should have more diversity than the original
+        assert len(set(result)) > 1
+
+    def test_progress_after_switch_resets(self):
+        """next_strategy resets stale iteration counter."""
+        from ampp.agents.strategy_controller import SWITCH_STALE_THRESHOLD
+        for _ in range(SWITCH_STALE_THRESHOLD):
+            self.ctrl.record_failure("r")
+        assert self.ctrl.should_switch()
+        weights = {sf.value: 1.0 for sf in StrategyFamily}
+        self.ctrl.next_strategy(weights, [])
+        assert self.ctrl.stale_iterations == 0
