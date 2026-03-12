@@ -115,7 +115,7 @@ class Normalizer:
     def _extract_quantifiers(self, text: str) -> list[dict[str, Any]]:
         qs: list[dict[str, Any]] = []
         if "for all" in text.lower():
-            qs.append({"quantifier": "for_all", "variable": "n", "domain": "N"})
+            qs.append({"quantifier": "forall", "variable": "n", "domain": "N"})
         if "there exists" in text.lower():
             qs.append({"quantifier": "exists", "variable": "x", "domain": "N"})
         return qs

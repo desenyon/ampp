@@ -47,7 +47,7 @@ def sample_spec() -> dict:
         "canonical_statement": "for all n in N, n*(n+1) is even",
         "target": "for all n in N, n*(n+1) is even",
         "variables": {"n": "N"},
-        "quantifiers": [{"quantifier": "for_all", "variable": "n", "domain": "N"}],
+        "quantifiers": [{"quantifier": "forall", "variable": "n", "domain": "N"}],
         "constraints": ["n >= 0"],
         "edge_cases": ["n=0", "n=1"],
         "lean_namespace": "ForAllEven",
