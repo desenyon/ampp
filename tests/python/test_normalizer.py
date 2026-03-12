@@ -46,7 +46,7 @@ class TestNormalizer:
 
     def test_quantifier_extraction(self):
         spec = self.norm.normalize("For all n in N there exists m such that m > n")
-        assert any(q["quantifier"] == "for_all" for q in spec.quantifiers)
+        assert any(q["quantifier"] == "forall" for q in spec.quantifiers)
         assert any(q["quantifier"] == "exists" for q in spec.quantifiers)
 
     def test_constraint_extraction(self):
