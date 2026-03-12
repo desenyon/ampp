@@ -50,12 +50,6 @@ jobs:
       - name: Test
         run: cargo test --all
 
-      - name: Upload binary (macOS)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ampp-macos-arm64
-          path: target/release/ampp
-
   # ── Python ───────────────────────────────────────────────────────────────────
   python:
     name: Python (${{ matrix.python-version }})
@@ -104,11 +98,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download macOS binary
-        uses: actions/download-artifact@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@v1
         with:
-          name: ampp-macos-arm64
-          path: .
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: macos-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - name: Build release binary
+        run: cargo build --release
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -121,12 +127,12 @@ jobs:
 
       - name: Smoke test (no LLM keys — proposer returns stubs)
         run: |
-          chmod +x ampp
-          ./ampp --problem "For all integers n >= 1, the sum 1+2+...+n equals n*(n+1)/2" \
-                 --max-iter 5 \
-                 --python python3 \
-                 --worker ampp/worker.py \
-                 --output /tmp/ampp_smoke
+          ./target/release/ampp \
+            --problem "For all integers n >= 1, the sum 1+2+...+n equals n*(n+1)/2" \
+            --max-iter 5 \
+            --python python3 \
+            --worker ampp/worker.py \
+            --output /tmp/ampp_smoke
 
       - name: Verify output artefacts exist
         run: |
