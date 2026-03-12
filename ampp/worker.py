@@ -4,14 +4,16 @@ The Rust core spawns this script as a subprocess and communicates
 via newline-delimited JSON (one message per line).
 
 Message types (field ``stage``):
-  NORMALISE  → FormalSpec
-  PROPOSE    → list[StepCandidate]
-  V1         → V1 counterexample check
-  V2         → SymPy symbolic check
-  V3         → Z3 SMT check
-  V4         → ATP check
-  V5         → Lean compilation check
-  shutdown   → graceful exit
+  PING             → health-check (responds immediately)
+  NORMALISE        → FormalSpec
+  PROPOSE          → list[StepCandidate]
+  MINE_CONJECTURE  → list of conjecture strings
+  V1               → counterexample check
+  V2               → SymPy symbolic check
+  V3               → Z3 SMT check
+  V4               → ATP check
+  V5               → Lean compilation check
+  shutdown         → graceful exit
 """
 from __future__ import annotations
 
@@ -67,7 +69,19 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
     candidate_json = request.get("candidate_json", {})
 
     try:
-        if stage == "NORMALISE":
+        # ── Health check ─────────────────────────────────────────────────────
+        if stage == "PING":
+            import os
+            return {
+                "request_id": request_id,
+                "stage": stage,
+                "passed": True,
+                "details": {"pid": os.getpid(), "status": "ok"},
+                "counterexample": None,
+            }
+
+        # ── Formal normalisation ──────────────────────────────────────────────
+        elif stage == "NORMALISE":
             problem = context.get("problem", "")
             spec = _normalizer.normalize(problem)
             return {
@@ -78,6 +92,7 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
                 "counterexample": None,
             }
 
+        # ── Proposer ensemble ─────────────────────────────────────────────────
         elif stage == "PROPOSE":
             subgoal_id = context.get("subgoal_id", "")
             branch_id = context.get("branch_id", "")
@@ -94,6 +109,10 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
                 attempts=attempts,
                 rejected_hashes=rejected,
             )
+
+            # Feed postmortem into rubric so strategy weights stay current
+            _rubric.postmortem(attempts)
+
             return {
                 "request_id": request_id,
                 "stage": stage,
@@ -102,15 +121,49 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
                 "counterexample": None,
             }
 
+        # ── Conjecture mining ─────────────────────────────────────────────────
+        elif stage == "MINE_CONJECTURE":
+            spec = context.get("spec", {})
+            bound = int(context.get("bound", 20))
+            conjectures = _conj_miner.mine(spec, bound=bound)
+            return {
+                "request_id": request_id,
+                "stage": stage,
+                "passed": True,
+                "details": {"conjectures": conjectures},
+                "counterexample": None,
+            }
+
+        # ── Rubric postmortem (optional explicit call) ─────────────────────────
+        elif stage == "RUBRIC_POSTMORTEM":
+            attempts = context.get("attempts", [])
+            new_weights = _rubric.postmortem(attempts)
+            _ensemble.update_weights(new_weights)
+            should_switch = _strategy_ctrl.should_switch()
+            if should_switch:
+                nxt = _strategy_ctrl.next_strategy(
+                    new_weights,
+                    context.get("current_strategies", []),
+                )
+                logger.info("Strategy switch triggered → %s", nxt.value)
+            return {
+                "request_id": request_id,
+                "stage": stage,
+                "passed": True,
+                "details": {
+                    "strategy_weights": new_weights,
+                    "should_switch": should_switch,
+                },
+                "counterexample": None,
+            }
+
+        # ── Verifier cascade stages ───────────────────────────────────────────
         elif stage in _verifiers:
             verifier = _verifiers[stage]
             candidate = StepCandidate.model_validate(candidate_json)
             passed, details = verifier.verify(candidate, context)
             cx = details.pop("witness", None)
-            if cx is not None:
-                cx_payload = {"witness": cx}
-            else:
-                cx_payload = None
+            cx_payload = {"witness": cx} if cx is not None else None
             return {
                 "request_id": request_id,
                 "stage": stage,
