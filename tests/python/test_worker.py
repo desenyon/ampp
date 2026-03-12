@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
 
 # Import handle directly to avoid subprocess overhead in unit tests
 from ampp.worker import handle

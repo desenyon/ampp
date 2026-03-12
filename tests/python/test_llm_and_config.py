@@ -1,7 +1,6 @@
 """Tests for ampp.llm and ampp.config."""
 from __future__ import annotations
 
-import pytest
 
 
 # ── Config tests ──────────────────────────────────────────────────────────────

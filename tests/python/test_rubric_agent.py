@@ -4,9 +4,8 @@ from __future__ import annotations
 import hashlib
 import uuid
 
-import pytest
 
-from ampp.agents.rubric_agent import RubricAgent, PASS_THRESHOLD, RubricScore
+from ampp.agents.rubric_agent import RubricAgent
 from ampp.schemas import (
     ActionType,
     NewClaimSpec,

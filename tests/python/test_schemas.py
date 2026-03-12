@@ -9,16 +9,12 @@ from pydantic import ValidationError
 
 from ampp.schemas import (
     ActionType,
-    ClaimStatus,
-    ClaimType,
     FormalSpec,
     NewClaimSpec,
     SmallCaseTest,
     StepCandidate,
     StrategyFamily,
     VerificationPlan,
-    VerificationRequest,
-    VerificationResponse,
 )
 
 

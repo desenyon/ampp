@@ -1,7 +1,6 @@
 """Tests for the formal Normalizer."""
 from __future__ import annotations
 
-import pytest
 
 from ampp.normalizer import Normalizer
 from ampp.schemas import FormalSpec

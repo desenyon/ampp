@@ -22,6 +22,18 @@ import logging
 import sys
 from typing import Any
 
+from ampp.agents.conjecture_miner import ConjectureMiner
+from ampp.agents.rubric_agent import RubricAgent
+from ampp.agents.strategy_controller import StrategyController
+from ampp.normalizer import Normalizer
+from ampp.proposers.ensemble import ProposerEnsemble
+from ampp.schemas import StepCandidate
+from ampp.verifiers.v1_counterexample import CounterexampleVerifier
+from ampp.verifiers.v2_sympy import SymPyVerifier
+from ampp.verifiers.v3_z3 import Z3Verifier
+from ampp.verifiers.v4_atp import ATPVerifier
+from ampp.verifiers.v5_lean import LeanVerifier
+
 # ── Configure logging to stderr (stdout is reserved for IPC) ─────────────────
 logging.basicConfig(
     stream=sys.stderr,
@@ -29,19 +41,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("ampp.worker")
-
-# ── Lazy imports (avoid startup cost if stage not invoked) ────────────────────
-from ampp.normalizer import Normalizer
-from ampp.proposers.ensemble import ProposerEnsemble
-from ampp.agents.rubric_agent import RubricAgent
-from ampp.agents.conjecture_miner import ConjectureMiner
-from ampp.agents.strategy_controller import StrategyController
-from ampp.verifiers.v1_counterexample import CounterexampleVerifier
-from ampp.verifiers.v2_sympy import SymPyVerifier
-from ampp.verifiers.v3_z3 import Z3Verifier
-from ampp.verifiers.v4_atp import ATPVerifier
-from ampp.verifiers.v5_lean import LeanVerifier
-from ampp.schemas import StepCandidate, VerificationRequest, VerificationResponse
 
 
 # ── Singleton instances ───────────────────────────────────────────────────────

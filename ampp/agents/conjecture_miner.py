@@ -126,7 +126,6 @@ class ConjectureMiner:
         bound: int,
     ) -> list[str]:
         target = evidence["target"] or "the main quantity"
-        seq = evidence["seq"]
         diffs = evidence["diffs"]
         conjectures = []
 
@@ -182,11 +181,11 @@ class ConjectureMiner:
         max_n, max_v = n_range[-1], seq[-1]
         if max_v <= max_n:
             conjectures.append(
-                f"An upper bound of O(n) appears consistent with small instances."
+                "An upper bound of O(n) appears consistent with small instances."
             )
         elif max_v <= max_n ** 2:
             conjectures.append(
-                f"An upper bound of O(n²) appears consistent with small instances."
+                "An upper bound of O(n²) appears consistent with small instances."
             )
         else:
             bound_guess = max_n * math.ceil(math.log2(max_n + 2))

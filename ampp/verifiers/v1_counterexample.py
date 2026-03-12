@@ -7,8 +7,6 @@ Returns immediately on the first counterexample found.
 """
 from __future__ import annotations
 
-import hashlib
-import itertools
 import logging
 import random
 from typing import Any

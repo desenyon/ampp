@@ -1,7 +1,6 @@
 """Tests for ProposerEnsemble and strategy controller."""
 from __future__ import annotations
 
-import pytest
 
 from ampp.agents.rubric_agent import RubricAgent
 from ampp.agents.strategy_controller import StrategyController
