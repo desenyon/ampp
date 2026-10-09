@@ -1,9 +1,9 @@
 """Tests for V1 counterexample verifier."""
+
 from __future__ import annotations
 
 import hashlib
 import uuid
-
 
 from ampp.schemas import (
     ActionType,
@@ -46,16 +46,19 @@ class TestCounterexampleVerifier:
     def test_trivial_claim_passes(self):
         cand = _candidate()
         passed, details = self.verifier.verify(cand, {})
-        assert passed is True
+        assert passed is False
+        assert details["outcome"] == "inconclusive"
 
     def test_passing_small_case_test(self):
         cases = [SmallCaseTest(description="n=0", parameters={"n": 0}, expected=True)]
         cand = _candidate(small_cases=cases)
         passed, details = self.verifier.verify(cand, {})
-        assert passed is True
+        assert passed is False
+        assert details["outcome"] == "inconclusive"
 
     def test_small_case_failure_detected(self):
         """Override _evaluate_claim to return False for one test."""
+
         class FailingVerifier(CounterexampleVerifier):
             def _evaluate_claim(self, candidate, params):
                 return params.get("n") != 0  # fails for n=0
@@ -70,7 +73,8 @@ class TestCounterexampleVerifier:
     def test_exhaustive_check_with_bound(self):
         cand = _candidate(stages=["V0", "V1"], bound=50)
         passed, details = self.verifier.verify(cand, {})
-        assert passed is True  # default evaluator returns True
+        assert passed is False
+        assert details["outcome"] == "inconclusive"
 
     def test_exhaustive_finds_counterexample(self):
         class CxVerifier(CounterexampleVerifier):

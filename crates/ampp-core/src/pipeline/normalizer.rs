@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Formal specification produced by the Normalizer from a raw problem string.
-/// All informal ambiguity is resolved at this stage.
+/// Heuristic/LLM normalization is not a verified translation to Lean.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormalSpec {
     /// Human-readable problem statement (original).
@@ -43,7 +43,10 @@ impl FormalSpec {
     pub fn fingerprint(&self) -> String {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
-        hasher.update(self.canonical_statement.trim().to_lowercase().as_bytes());
+        let mut constraints = self.constraints.clone();
+        constraints.sort();
+        let payload = serde_json::json!({"canonical_statement": self.canonical_statement, "target": self.target, "constraints": constraints});
+        hasher.update(payload.to_string().as_bytes());
         hex::encode(hasher.finalize())
     }
 }

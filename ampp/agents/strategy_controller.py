@@ -9,6 +9,7 @@ Triggered when:
 Selects the next strategy from the weighted family list, enforcing
 beam-state diversity across concurrent proof branches.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,8 +23,8 @@ from ampp.schemas import StrategyFamily
 logger = logging.getLogger(__name__)
 
 ALL_STRATEGIES = list(StrategyFamily)
-SWITCH_STALE_THRESHOLD = 5      # iterations without progress → force switch
-MAX_IDENTICAL_FAILURES = 3      # same failure reason → force switch
+SWITCH_STALE_THRESHOLD = 5  # iterations without progress → force switch
+MAX_IDENTICAL_FAILURES = 3  # same failure reason → force switch
 ENTROPY_SWITCH_THRESHOLD = 2.5  # Shannon entropy over recent failures → switch
 # Minimum fraction of beam slots that must use distinct strategy families
 BEAM_DIVERSITY_RATIO = 0.6
@@ -165,9 +166,7 @@ class StrategyController:
             return 0.0
         counts = Counter(stages)
         total = len(stages)
-        return -sum(
-            (c / total) * math.log2(c / total) for c in counts.values()
-        )
+        return -sum((c / total) * math.log2(c / total) for c in counts.values())
 
     @property
     def current_strategy(self) -> StrategyFamily:

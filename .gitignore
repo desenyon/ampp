@@ -1,7 +1,6 @@
 # ── Rust ───────────────────────────────────────────────────────────────────────
 /target/
 **/*.rs.bk
-Cargo.lock             # keep for binaries; remove this line if publishing a library
 
 # ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/

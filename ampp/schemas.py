@@ -3,6 +3,7 @@
 All objects must be serialisable to/from JSON without loss to satisfy
 the deterministic IPC contract with the Rust core.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -12,8 +13,8 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
-
 # ── Enumerations ──────────────────────────────────────────────────────────────
+
 
 class ActionType(str, Enum):
     INTRODUCE_LEMMA = "introduce_lemma"
@@ -53,6 +54,7 @@ class ClaimStatus(str, Enum):
 
 # ── Core objects ──────────────────────────────────────────────────────────────
 
+
 class VerificationPlan(BaseModel):
     stages: list[str]
     success_criteria: dict[str, str] = {}
@@ -89,6 +91,7 @@ class StepCandidate(BaseModel):
 
     All fields are mandatory; validation raises ValidationError otherwise.
     """
+
     id: str
     subgoal_id: str
     action_type: ActionType
@@ -131,8 +134,19 @@ class VerificationResponse(BaseModel):
     counterexample: dict[str, Any] | None = None
 
 
+class VerificationOutcome(str, Enum):
+    """Checker evidence, distinct from the legacy ``passed`` boolean."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    INCONCLUSIVE = "inconclusive"
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
+
+
 class FormalSpec(BaseModel):
     """Normalised problem specification."""
+
     raw_statement: str
     canonical_statement: str
     variables: dict[str, str] = {}
@@ -151,5 +165,7 @@ class FormalSpec(BaseModel):
                 "constraints": sorted(self.constraints),
             },
             sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
         )
         return hashlib.sha256(payload.encode()).hexdigest()

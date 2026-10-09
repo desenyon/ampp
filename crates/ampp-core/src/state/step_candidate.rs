@@ -84,6 +84,17 @@ impl StepCandidate {
         if self.new_claims.is_empty() {
             anyhow::bail!("StepCandidate has no new_claims");
         }
+        anyhow::ensure!(
+            self.new_claims.len() == 1,
+            "Exactly one claim per candidate is supported"
+        );
+        anyhow::ensure!(
+            matches!(
+                self.new_claims[0].claim_type.as_str(),
+                "lemma" | "theorem" | "auxiliary"
+            ),
+            "Unsupported claim_type"
+        );
         if self.verification_plan.stages.is_empty() {
             anyhow::bail!("StepCandidate missing verification_plan stages");
         }
@@ -96,6 +107,19 @@ impl StepCandidate {
             }
         }
         Ok(())
+    }
+
+    /// Cache identity computed by the verifier, including proof and context.
+    /// Proposer-supplied hashes are never trusted for acceptance or rejection.
+    pub fn verification_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let payload = serde_json::json!({
+            "policy": "lean-kernel-v1", "subgoal": self.subgoal_id,
+            "branch": self.branch_id, "claims": self.new_claims,
+            "dependencies": self.dependencies, "proof": self.lean_stub,
+            "plan": self.verification_plan, "tests": self.small_case_tests,
+        });
+        hex::encode(Sha256::digest(payload.to_string().as_bytes()))
     }
 
     /// Compute canonical hash for deduplication.

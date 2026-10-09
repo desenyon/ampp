@@ -8,6 +8,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Enforce V0 and statement-bound Lean verification independently of candidate-selected stages. V0-only plans, skipped tools, legacy stubs, and unrelated `True` theorems cannot commit verified claims.
+- Audit Lean axioms; reject admitted proofs, custom axioms, and native-decision certificates outside the supported policy.
+- Replace permissive solver fallthrough with explicit failed, inconclusive, unavailable, and error outcomes. Disable the placeholder ATP translation.
+- Parse diagnostic arithmetic without evaluating Python code; correct Z3 numeric literals and assumption polarity, reject inconsistent assumptions, and ignore candidate-selected success criteria as assumptions.
+- Preserve case in mathematical identity and include proof/context in rejection-cache identity. Unavailable tools and worker failures remain retryable.
+- Require evidence and verified dependencies at storage boundaries; exclude legacy verified rows from dependency sets without deleting them.
+- Correlate and serialize worker requests; bound I/O, timeouts, and shutdown; stop solver process groups on Unix after transport failure.
+- Export all current run branches, real tool versions, witnesses, accurate counts, and exact checked Lean source. Preserve previous output files and isolate reports when reusing a database.
+- Honor the null provider even when credentials exist; avoid repeatedly counting the same rubric failure.
+
+### Added
+- `--formal-target`, `--candidate-file`, `--offline`, `--doctor`, and `--worker-timeout` CLI options, plus installed-module worker startup.
+- A formal proof proposer that keeps the supplied target fixed and asks the selected model for a proof term.
+- Pinned Lean 4.19.0 core examples, trust-boundary regressions, real CLI/worker/SQLite/Lean integration tests, enforced Python type checks, package builds, and Linux/macOS Rust CI.
+- README covering actual architecture, setup, configuration, usage, evidence formats, migration, and limitations.
+
+### Changed
+- Verified claims require the `lean-kernel-v1` certificate. Legacy worker responses and whole-declaration `lean_stub` values require migration.
+- Manifest schema is 2. Incomplete runs omit `solution.lean`; `verification_log.json` contains verified claims and attempts. See the README migration guide.
+
 ---
 
 ## [0.1.1] — 2026-03-12

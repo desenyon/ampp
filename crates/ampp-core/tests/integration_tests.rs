@@ -47,7 +47,11 @@ mod integration {
             request_id: req.request_id,
             stage: req.stage,
             passed: true,
-            details: serde_json::json!({"mock": true}),
+            details: {
+                use sha2::{Digest, Sha256};
+                let source = "synthetic unit-test certificate";
+                serde_json::json!({"outcome": "passed", "policy": "lean-kernel-v1", "lean_result": "compiled", "statement": req.candidate_json["new_claims"][0]["statement"], "lean_source": source, "source_sha256": hex::encode(Sha256::digest(source.as_bytes())), "axioms": []})
+            },
             counterexample: None,
         })
     }
@@ -57,7 +61,7 @@ mod integration {
             request_id: req.request_id,
             stage: req.stage.clone(),
             passed: false,
-            details: serde_json::json!({"reason": format!("{} rejected by mock", req.stage)}),
+            details: serde_json::json!({"outcome": "failed", "reason": format!("{} rejected by mock", req.stage)}),
             counterexample: None,
         })
     }
@@ -155,7 +159,7 @@ mod integration {
 
         // Pre-register the hash as rejected
         store
-            .register_rejected_hash(&candidate.candidate_hash)
+            .register_rejected_hash(&candidate.verification_hash())
             .unwrap();
 
         let cascade = VerificationCascade::new(&store, mock_python_caller);

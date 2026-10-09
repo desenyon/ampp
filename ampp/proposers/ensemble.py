@@ -6,12 +6,14 @@ The ensemble:
 3. Passes results through the RubricAgent for triage.
 4. Returns the ranked, rubric-approved list.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 from ampp.proposers.base import BaseProposer
+from ampp.proposers.formal import FormalProofProposer
 from ampp.proposers.specializations import (
     AlgebraicNormalizationProposer,
     ConstructiveProposer,
@@ -69,6 +71,12 @@ class ProposerEnsemble:
         rejected_hashes: set[str] | None = None,
     ) -> list[StepCandidate]:
         """Run all proposers, deduplicate, triage, and rank."""
+        # An explicit target gets a proof-term proposer. Research strategies still
+        # generate informal suggestions when no formal target is supplied.
+        if spec.get("formal_target"):
+            return FormalProofProposer().propose(
+                subgoal_id, branch_id, spec, verified_claims, attempts
+            )
         raw: list[StepCandidate] = []
         rejected_hashes = rejected_hashes or set()
 
@@ -109,7 +117,5 @@ class ProposerEnsemble:
         if self._rubric is not None:
             unique = self._rubric.triage(unique, attempts)
 
-        logger.info(
-            "Ensemble produced %d candidates for subgoal %s", len(unique), subgoal_id
-        )
+        logger.info("Ensemble produced %d candidates for subgoal %s", len(unique), subgoal_id)
         return unique

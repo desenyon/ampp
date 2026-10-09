@@ -1,4 +1,15 @@
 """AMPP Python package — Autonomous Mathematical Proof Pipeline."""
+
+from ampp.config import cfg
+from ampp.llm import (
+    AnthropicProvider,
+    LLMProvider,
+    NullProvider,
+    OpenAIProvider,
+    get_provider,
+    llm_generate_claims,
+    set_provider,
+)
 from ampp.schemas import (
     ActionType,
     ClaimStatus,
@@ -12,18 +23,8 @@ from ampp.schemas import (
     VerificationRequest,
     VerificationResponse,
 )
-from ampp.config import cfg
-from ampp.llm import (
-    AnthropicProvider,
-    LLMProvider,
-    NullProvider,
-    OpenAIProvider,
-    get_provider,
-    llm_generate_claims,
-    set_provider,
-)
 
-__version__ = "0.2.0"
+__version__ = "0.1.1"
 
 __all__ = [
     # Schemas

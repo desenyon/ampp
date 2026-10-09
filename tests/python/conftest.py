@@ -1,4 +1,5 @@
 """Shared pytest fixtures."""
+
 from __future__ import annotations
 
 import hashlib
@@ -52,3 +53,15 @@ def sample_spec() -> dict:
         "edge_cases": ["n=0", "n=1"],
         "lean_namespace": "ForAllEven",
     }
+
+
+@pytest.fixture(autouse=True)
+def isolate_provider_environment(monkeypatch):
+    """Never let developer credentials select a paid provider during tests."""
+    from ampp.llm import set_provider
+
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_BASE_URL", "AMPP_LLM_PROVIDER"):
+        monkeypatch.delenv(name, raising=False)
+    set_provider(None)
+    yield
+    set_provider(None)

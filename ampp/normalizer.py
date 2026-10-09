@@ -9,6 +9,7 @@ Two-pass strategy
 2. LLM-assisted extraction (runs when a provider is configured) — enriches
    the spec with more accurate variables, domains, constraints, and edge cases.
 """
+
 from __future__ import annotations
 
 import logging
@@ -140,7 +141,8 @@ class Normalizer:
     def _llm_extract(self, raw: str) -> dict[str, Any] | None:
         """Call the LLM to extract structured fields.  Returns None on any failure."""
         try:
-            from ampp.llm import get_provider, NullProvider
+            from ampp.llm import NullProvider, get_provider
+
             provider = get_provider()
             if isinstance(provider, NullProvider):
                 return None

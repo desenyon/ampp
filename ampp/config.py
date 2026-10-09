@@ -6,12 +6,14 @@ the codebase never calls `os.getenv` directly for configuration values.
 Import pattern:
     from ampp.config import cfg
 
-All values can be overridden in tests by setting env vars before import,
-or by calling `config.override(...)`.
+Set environment variables before import, or instantiate AMPPConfig directly
+for isolated configuration in library code and tests.
 """
+
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 
@@ -21,18 +23,10 @@ class AMPPConfig:
     llm_provider: str = field(
         default_factory=lambda: os.getenv("AMPP_LLM_PROVIDER", "openai").lower()
     )
-    openai_api_key: str | None = field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY")
-    )
-    openai_model: str = field(
-        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o")
-    )
-    openai_base_url: str | None = field(
-        default_factory=lambda: os.getenv("OPENAI_BASE_URL")
-    )
-    anthropic_api_key: str | None = field(
-        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY")
-    )
+    openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
+    openai_base_url: str | None = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL"))
+    anthropic_api_key: str | None = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"))
     anthropic_model: str = field(
         default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")
     )
@@ -42,28 +36,25 @@ class AMPPConfig:
     llm_temperature: float = field(
         default_factory=lambda: float(os.getenv("AMPP_LLM_TEMPERATURE", "0.2"))
     )
-    llm_retries: int = field(
-        default_factory=lambda: int(os.getenv("AMPP_LLM_RETRIES", "3"))
-    )
+    llm_retries: int = field(default_factory=lambda: int(os.getenv("AMPP_LLM_RETRIES", "3")))
 
     # ── Pipeline ──────────────────────────────────────────────────────────────
     max_iterations: int = field(
         default_factory=lambda: int(os.getenv("AMPP_MAX_ITERATIONS", "200"))
     )
-    beam_width: int = field(
-        default_factory=lambda: int(os.getenv("AMPP_BEAM_WIDTH", "4"))
-    )
+    beam_width: int = field(default_factory=lambda: int(os.getenv("AMPP_BEAM_WIDTH", "4")))
     stale_threshold: int = field(
         default_factory=lambda: int(os.getenv("AMPP_STALE_THRESHOLD", "10"))
     )
-    random_seed: int = field(
-        default_factory=lambda: int(os.getenv("AMPP_RANDOM_SEED", "42"))
-    )
+    random_seed: int = field(default_factory=lambda: int(os.getenv("AMPP_RANDOM_SEED", "42")))
     max_candidates_per_proposer: int = field(
         default_factory=lambda: int(os.getenv("AMPP_MAX_CANDIDATES_PER_PROPOSER", "3"))
     )
 
     # ── Verifiers ─────────────────────────────────────────────────────────────
+    lean_binary: str = field(default_factory=lambda: os.getenv("AMPP_LEAN_BINARY", "lean"))
+    lean_project: str | None = field(default_factory=lambda: os.getenv("AMPP_LEAN_PROJECT"))
+    lean_imports: str = field(default_factory=lambda: os.getenv("AMPP_LEAN_IMPORTS", ""))
     z3_timeout_ms: int = field(
         default_factory=lambda: int(os.getenv("AMPP_Z3_TIMEOUT_MS", "30000"))
     )
@@ -86,12 +77,20 @@ class AMPPConfig:
     )
 
     # ── Artifacts ─────────────────────────────────────────────────────────────
-    output_dir: str = field(
-        default_factory=lambda: os.getenv("AMPP_OUTPUT_DIR", "output")
-    )
-    db_path: str = field(
-        default_factory=lambda: os.getenv("AMPP_DB_PATH", "ampp_state.db")
-    )
+    output_dir: str = field(default_factory=lambda: os.getenv("AMPP_OUTPUT_DIR", "output"))
+    db_path: str = field(default_factory=lambda: os.getenv("AMPP_DB_PATH", "ampp_state.db"))
+
+    def __post_init__(self) -> None:
+        for name in ("llm_retries", "llm_max_tokens", "z3_timeout_ms", "lean_timeout_sec"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        for name in ("v1_random_trials", "v1_max_enumeration_bound"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} must be nonnegative")
+        if any(
+            not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", name) for name in self.lean_imports.split()
+        ):
+            raise ValueError("AMPP_LEAN_IMPORTS must contain space-separated module names")
 
     @property
     def has_openai(self) -> bool:
@@ -109,6 +108,8 @@ class AMPPConfig:
     @property
     def effective_provider(self) -> str:
         """Resolve which provider will actually be used."""
+        if self.llm_provider == "null":
+            return "null"
         if self.llm_provider == "anthropic" and self.has_anthropic:
             return "anthropic"
         if self.has_openai:

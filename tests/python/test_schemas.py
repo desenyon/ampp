@@ -1,4 +1,5 @@
 """Tests for Pydantic schemas — exhaustive validation coverage."""
+
 from __future__ import annotations
 
 import hashlib
@@ -131,7 +132,5 @@ class TestSmallCaseTest:
         assert t.expected is True
 
     def test_false_expected(self):
-        t = SmallCaseTest(
-            description="should fail", parameters={"n": -1}, expected=False
-        )
+        t = SmallCaseTest(description="should fail", parameters={"n": -1}, expected=False)
         assert t.expected is False
