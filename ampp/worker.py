@@ -15,6 +15,7 @@ Message types (field ``stage``):
   V5               → Lean compilation check
   shutdown         → graceful exit
 """
+
 from __future__ import annotations
 
 import json
@@ -61,21 +62,65 @@ _verifiers: dict[str, Any] = {
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
+
+def tool_versions() -> dict[str, str]:
+    """Read installed package metadata and the configured Lean version."""
+    import importlib.metadata
+    import platform
+    import shutil
+    import subprocess
+
+    from ampp.config import cfg
+
+    versions = {"python": platform.python_version(), "lean": "unavailable"}
+    for package in ("ampp", "sympy", "z3-solver"):
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            versions[package] = "unavailable"
+    lean = shutil.which(cfg.lean_binary)
+    if lean:
+        try:
+            proc = subprocess.run(
+                [lean, "--version"], capture_output=True, text=True, timeout=5, cwd=cfg.lean_project
+            )
+            versions["lean"] = proc.stdout.strip() if proc.returncode == 0 else "unavailable"
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return versions
+
+
 def handle(request: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        return {
+            "request_id": "",
+            "stage": "",
+            "passed": False,
+            "details": {"outcome": "error", "reason": "request must be an object"},
+            "counterexample": None,
+        }
     stage = request.get("stage", "")
     request_id = request.get("request_id", "")
     context = request.get("context", {})
     candidate_json = request.get("candidate_json", {})
 
     try:
+        if (
+            not isinstance(stage, str)
+            or not isinstance(request_id, str)
+            or not isinstance(context, dict)
+            or not isinstance(candidate_json, dict)
+        ):
+            raise ValueError("invalid request envelope")
         # ── Health check ─────────────────────────────────────────────────────
         if stage == "PING":
             import os
+
             return {
                 "request_id": request_id,
                 "stage": stage,
                 "passed": True,
-                "details": {"pid": os.getpid(), "status": "ok"},
+                "details": {"pid": os.getpid(), "status": "ok", "versions": tool_versions()},
                 "counterexample": None,
             }
 
@@ -96,6 +141,7 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
             subgoal_id = context.get("subgoal_id", "")
             branch_id = context.get("branch_id", "")
             spec = context.get("spec", {})
+            spec["formal_target"] = context.get("formal_target", False)
             verified = context.get("verified_claims", [])
             attempts = context.get("attempts", [])
             rejected = set(context.get("rejected_hashes", []))
@@ -176,8 +222,8 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
             return {
                 "request_id": request_id,
                 "stage": stage,
-                "passed": True,
-                "details": {"note": f"unknown stage {stage!r} — conservative pass"},
+                "passed": False,
+                "details": {"outcome": "error", "reason": f"unknown stage {stage!r}"},
                 "counterexample": None,
             }
 
@@ -187,12 +233,13 @@ def handle(request: dict[str, Any]) -> dict[str, Any]:
             "request_id": request_id,
             "stage": stage,
             "passed": False,
-            "details": {"reason": f"worker exception: {exc}"},
+            "details": {"outcome": "error", "reason": f"worker exception: {exc}"},
             "counterexample": None,
         }
 
 
 # ── Main event loop ───────────────────────────────────────────────────────────
+
 
 def main() -> None:
     logger.info("AMPP Python worker started (pid=%d)", __import__("os").getpid())
@@ -206,10 +253,21 @@ def main() -> None:
             request = json.loads(raw_line)
         except json.JSONDecodeError as exc:
             logger.error("JSON decode error: %s", exc)
+            response = {
+                "request_id": "",
+                "stage": "",
+                "passed": False,
+                "details": {"outcome": "error", "reason": "invalid JSON"},
+                "counterexample": None,
+            }
+            sys.stdout.write(json.dumps(response) + "\n")
+            sys.stdout.flush()
             continue
 
         # Graceful shutdown signal
-        if request.get("type") == "shutdown" or request.get("stage") == "shutdown":
+        if isinstance(request, dict) and (
+            request.get("type") == "shutdown" or request.get("stage") == "shutdown"
+        ):
             logger.info("Shutdown signal received")
             break
 

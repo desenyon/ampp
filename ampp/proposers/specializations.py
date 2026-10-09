@@ -7,6 +7,7 @@ default, Anthropic opt-in, OpenClaw via OPENAI_BASE_URL) at runtime.
 The LLM back-end is isolated behind ``llm_generate_claims`` so the entire
 pipeline remains testable without API keys (NullProvider returns []).
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,14 +40,11 @@ def _user_ctx(target: str, verified: list[dict[str, Any]], strategy_hint: str) -
         stmts = [v.get("statement", "") for v in verified[:5] if v.get("statement")]
         if stmts:
             dep_summary = "\n\nAlready verified:\n" + "\n".join(f"  • {s}" for s in stmts)
-    return (
-        f"Target theorem: {target}\n"
-        f"Strategy: {strategy_hint}"
-        + dep_summary
-    )
+    return f"Target theorem: {target}\nStrategy: {strategy_hint}" + dep_summary
 
 
 # ── Concrete proposer implementations ────────────────────────────────────────
+
 
 class InductionProposer(BaseProposer):
     """Proposes claims amenable to simple mathematical induction."""
@@ -65,8 +63,7 @@ class InductionProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: identify an inductive invariant P(n) such that "
+            _BASE_SYSTEM + "\nFocus: identify an inductive invariant P(n) such that "
             "P(0) is trivially true and P(n) → P(n+1) implies the target."
         )
         user = _user_ctx(target, verified_claims, "simple induction")
@@ -82,10 +79,7 @@ class InductionProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[c["id"] for c in verified_claims[:5]],
                 stages=["V0", "V1", "V2", "V5"],
-                lean_stub=(
-                    "-- Induction lemma\n"
-                    "theorem lemma_induction (n : ℕ) : True := trivial"
-                ),
+                lean_stub=("-- Induction lemma\ntheorem lemma_induction (n : ℕ) : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=0", parameters={"n": 0}, expected=True),
                     SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True),
@@ -113,8 +107,7 @@ class StrongInductionProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: strong induction — assume P(k) for all k < n and derive P(n). "
+            _BASE_SYSTEM + "\nFocus: strong induction — assume P(k) for all k < n and derive P(n). "
             "Identify the well-founded relation and the inductive hypothesis."
         )
         user = _user_ctx(target, verified_claims, "strong/complete induction")
@@ -129,10 +122,7 @@ class StrongInductionProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[c["id"] for c in verified_claims[:5]],
                 stages=["V0", "V1", "V5"],
-                lean_stub=(
-                    "-- Strong induction\n"
-                    "theorem strong_ind (n : ℕ) : True := trivial"
-                ),
+                lean_stub=("-- Strong induction\ntheorem strong_ind (n : ℕ) : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=0", parameters={"n": 0}, expected=True),
                     SmallCaseTest(description="n=3", parameters={"n": 3}, expected=True),
@@ -175,10 +165,7 @@ class MinimalCounterexampleProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[c["id"] for c in verified_claims[:3]],
                 stages=["V0", "V1", "V3", "V5"],
-                lean_stub=(
-                    "-- Minimal counterexample\n"
-                    "theorem no_min_cx : True := trivial"
-                ),
+                lean_stub=("-- Minimal counterexample\ntheorem no_min_cx : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True),
                 ],
@@ -220,10 +207,7 @@ class ExtremalProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[],
                 stages=["V0", "V1", "V3", "V5"],
-                lean_stub=(
-                    "-- Extremal element\n"
-                    "theorem extremal_exists : True := trivial"
-                ),
+                lean_stub=("-- Extremal element\ntheorem extremal_exists : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=2", parameters={"n": 2}, expected=True),
                 ],
@@ -249,8 +233,7 @@ class InvariantMonovariantProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: find a quantity that is preserved (invariant) or strictly "
+            _BASE_SYSTEM + "\nFocus: find a quantity that is preserved (invariant) or strictly "
             "monotone (monovariant) under the described process/operation.  "
             "State the invariant precisely and explain why it is preserved."
         )
@@ -267,8 +250,7 @@ class InvariantMonovariantProposer(BaseProposer):
                 dependencies=[c["id"] for c in verified_claims[:3]],
                 stages=["V0", "V1", "V2", "V5"],
                 lean_stub=(
-                    "-- Invariant preservation\n"
-                    "theorem invariant_preserved : True := trivial"
+                    "-- Invariant preservation\ntheorem invariant_preserved : True := trivial"
                 ),
                 small_cases=[
                     SmallCaseTest(description="step=0", parameters={"step": 0}, expected=True),
@@ -296,8 +278,7 @@ class AlgebraicNormalizationProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: reduce the statement to a canonical algebraic form using "
+            _BASE_SYSTEM + "\nFocus: reduce the statement to a canonical algebraic form using "
             "known identities, polynomial manipulations, generating functions, "
             "or modular arithmetic reductions."
         )
@@ -313,10 +294,7 @@ class AlgebraicNormalizationProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[c["id"] for c in verified_claims[:5]],
                 stages=["V0", "V1", "V2", "V3", "V5"],
-                lean_stub=(
-                    "-- Algebraic normalization\n"
-                    "theorem alg_normal : True := by ring"
-                ),
+                lean_stub=("-- Algebraic normalization\ntheorem alg_normal : True := by ring"),
                 small_cases=[
                     SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True),
                     SmallCaseTest(description="n=2", parameters={"n": 2}, expected=True),
@@ -343,8 +321,7 @@ class DoubleCountingProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: count a common quantity in two different ways, or establish "
+            _BASE_SYSTEM + "\nFocus: count a common quantity in two different ways, or establish "
             "a bijection between two finite sets to prove their cardinalities are equal."
         )
         user = _user_ctx(target, verified_claims, "double counting / bijection")
@@ -359,10 +336,7 @@ class DoubleCountingProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[],
                 stages=["V0", "V1", "V2", "V5"],
-                lean_stub=(
-                    "-- Double counting\n"
-                    "theorem double_count : True := trivial"
-                ),
+                lean_stub=("-- Double counting\ntheorem double_count : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=2", parameters={"n": 2}, expected=True),
                     SmallCaseTest(description="n=3", parameters={"n": 3}, expected=True),
@@ -390,8 +364,7 @@ class ConstructiveProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: construct an explicit, computable witness.  "
+            _BASE_SYSTEM + "\nFocus: construct an explicit, computable witness.  "
             "Define a concrete object or algorithm that satisfies the existential claim."
         )
         user = _user_ctx(target, verified_claims, "constructive witness")
@@ -406,10 +379,7 @@ class ConstructiveProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[c["id"] for c in verified_claims[:3]],
                 stages=["V0", "V1", "V5"],
-                lean_stub=(
-                    "-- Constructive witness\n"
-                    "theorem constructive_lem : True := trivial"
-                ),
+                lean_stub=("-- Constructive witness\ntheorem constructive_lem : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True),
                 ],
@@ -435,8 +405,7 @@ class GraphTranslationProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: model the combinatorial structure as a graph (or hypergraph). "
+            _BASE_SYSTEM + "\nFocus: model the combinatorial structure as a graph (or hypergraph). "
             "Translate the claim into a statement about degrees, paths, colourings, "
             "cliques, independent sets, or graph homomorphisms."
         )
@@ -452,10 +421,7 @@ class GraphTranslationProposer(BaseProposer):
                 statements=[stmt],
                 dependencies=[],
                 stages=["V0", "V1", "V3", "V5"],
-                lean_stub=(
-                    "-- Graph translation\n"
-                    "theorem graph_lemma : True := trivial"
-                ),
+                lean_stub=("-- Graph translation\ntheorem graph_lemma : True := trivial"),
                 small_cases=[
                     SmallCaseTest(description="n=3", parameters={"n": 3}, expected=True),
                     SmallCaseTest(description="n=4", parameters={"n": 4}, expected=True),
@@ -482,8 +448,7 @@ class ContradictionProposer(BaseProposer):
     ) -> list[StepCandidate]:
         target = spec.get("target", "")
         system = (
-            _BASE_SYSTEM
-            + "\nFocus: assume the negation of the claim and derive a contradiction. "
+            _BASE_SYSTEM + "\nFocus: assume the negation of the claim and derive a contradiction. "
             "Identify the key intermediate statement whose truth with the negation "
             "leads directly to False or ⊥."
         )
@@ -511,7 +476,6 @@ class ContradictionProposer(BaseProposer):
             )
             for stmt in claims[:3]
         ]
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────

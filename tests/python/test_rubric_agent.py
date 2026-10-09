@@ -1,9 +1,9 @@
 """Tests for the Rubric Agent — quality gate and workflow controller."""
+
 from __future__ import annotations
 
 import hashlib
 import uuid
-
 
 from ampp.agents.rubric_agent import RubricAgent
 from ampp.schemas import (
@@ -27,9 +27,7 @@ def make_good_candidate(branch_id: str = "b1") -> StepCandidate:
             stages=["V0", "V1", "V5"],
             success_criteria={"V5": "lean compiles"},
         ),
-        small_case_tests=[
-            SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True)
-        ],
+        small_case_tests=[SmallCaseTest(description="n=1", parameters={"n": 1}, expected=True)],
         lean_stub="theorem t : True := trivial",
         strategy_family=StrategyFamily.INDUCTION,
         candidate_hash=hashlib.sha256(uuid.uuid4().bytes).hexdigest(),

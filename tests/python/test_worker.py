@@ -3,10 +3,10 @@
 These tests exercise the ``handle()`` function directly without spawning
 a subprocess, which keeps them fast and CI-friendly.
 """
+
 from __future__ import annotations
 
 import uuid
-
 
 # Import handle directly to avoid subprocess overhead in unit tests
 from ampp.worker import handle
@@ -57,13 +57,15 @@ class TestWorkerHandle:
         assert "candidates" in resp["details"]
         assert isinstance(resp["details"]["candidates"], list)
 
-    def test_unknown_stage_passes_conservatively(self):
+    def test_unknown_stage_fails_closed(self):
         resp = handle(_req("UNKNOWN_STAGE"))
-        assert resp["passed"] is True
-        assert "unknown stage" in resp["details"].get("note", "")
+        assert resp["passed"] is False
+        assert resp["details"]["outcome"] == "error"
+        assert "unknown stage" in resp["details"].get("reason", "")
 
     def test_v1_with_valid_candidate(self):
         import hashlib
+
         cand = {
             "id": str(uuid.uuid4()),
             "subgoal_id": "sg-1",
@@ -83,6 +85,7 @@ class TestWorkerHandle:
 
     def test_v2_trivial_identity(self):
         import hashlib
+
         cand = {
             "id": str(uuid.uuid4()),
             "subgoal_id": "sg-2",

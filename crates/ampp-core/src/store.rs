@@ -105,6 +105,11 @@ impl ProofStore {
     // ── Claims ───────────────────────────────────────────────────────────────
 
     pub fn insert_claim(&self, claim: &Claim) -> Result<()> {
+        self.validate_dependencies(claim)?;
+        anyhow::ensure!(
+            claim.status != crate::state::ClaimStatus::Verified || claim.is_verified(),
+            "Cannot persist verified claim without Lean evidence"
+        );
         let data = serde_json::to_string(claim)?;
         self.conn.execute(
             "INSERT INTO claims (id, branch_id, status, proof_hash, data) VALUES (?1,?2,?3,?4,?5)",
@@ -120,11 +125,45 @@ impl ProofStore {
     }
 
     pub fn update_claim(&self, claim: &Claim) -> Result<()> {
+        self.validate_dependencies(claim)?;
+        let previous = self
+            .get_claim(&claim.id)?
+            .ok_or_else(|| anyhow::anyhow!("Unknown claim {}", claim.id))?;
+        anyhow::ensure!(
+            previous.statement == claim.statement
+                && previous.branch_id == claim.branch_id
+                && previous.dependencies == claim.dependencies
+                && previous.proof_hash == claim.proof_hash,
+            "Claim identity and dependencies are immutable"
+        );
+        anyhow::ensure!(
+            previous.status == crate::state::ClaimStatus::Proposed || previous == *claim,
+            "Terminal claims are immutable"
+        );
+        anyhow::ensure!(
+            claim.status != crate::state::ClaimStatus::Verified || claim.is_verified(),
+            "Cannot persist verified claim without Lean evidence"
+        );
         let data = serde_json::to_string(claim)?;
         self.conn.execute(
             "UPDATE claims SET status=?1, data=?2, updated_at=datetime('now') WHERE id=?3",
             params![serde_json::to_string(&claim.status)?, data, claim.id],
         )?;
+        Ok(())
+    }
+
+    fn validate_dependencies(&self, claim: &Claim) -> Result<()> {
+        if claim.status == crate::state::ClaimStatus::Verified {
+            for id in &claim.dependencies {
+                let dependency = self
+                    .get_claim(id)?
+                    .ok_or_else(|| anyhow::anyhow!("Unknown dependency {id}"))?;
+                anyhow::ensure!(
+                    dependency.is_verified() && dependency.branch_id == claim.branch_id,
+                    "Dependency {id} is not verified on this branch"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -144,8 +183,10 @@ impl ProofStore {
             .conn
             .prepare(r#"SELECT data FROM claims WHERE branch_id=?1 AND status='"verified"'"#)?;
         let rows = stmt.query_map(params![branch_id], |row| row.get::<_, String>(0))?;
-        rows.map(|r| Ok(serde_json::from_str(&r?)?))
-            .collect::<Result<_>>()
+        let claims: Vec<Claim> = rows
+            .map(|r| Ok(serde_json::from_str(&r?)?))
+            .collect::<Result<_>>()?;
+        Ok(claims.into_iter().filter(Claim::is_verified).collect())
     }
 
     pub fn get_all_claims_for_branch(&self, branch_id: &str) -> Result<Vec<Claim>> {

@@ -1,11 +1,11 @@
 """Base interface for all Proposer specialisations."""
+
 from __future__ import annotations
 
 import hashlib
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any
-
-import uuid
 
 from ampp.schemas import (
     ActionType,
@@ -26,8 +26,7 @@ class BaseProposer(ABC):
 
     @property
     @abstractmethod
-    def strategy_family(self) -> StrategyFamily:
-        ...
+    def strategy_family(self) -> StrategyFamily: ...
 
     @abstractmethod
     def propose(

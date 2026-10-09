@@ -5,6 +5,7 @@ infers bounds, and suggests structural conjectures.
 
 All conjectures must still pass the full verification cascade.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,9 @@ logger = logging.getLogger(__name__)
 
 # ── LLM import (optional — graceful fallback if not configured) ───────────────
 try:
-    from ampp.llm import get_provider as _get_llm_provider, NullProvider
+    from ampp.llm import NullProvider
+    from ampp.llm import get_provider as _get_llm_provider
+
     _HAS_LLM = True
 except Exception:  # pragma: no cover
     _HAS_LLM = False
@@ -164,8 +167,7 @@ class ConjectureMiner:
         if parities and len(set(parities)) == 1:
             parity_name = "even" if parities[0] == 0 else "odd"
             conjectures.append(
-                f"For all instances, '{target}' is always {parity_name} — "
-                "parity is an invariant."
+                f"For all instances, '{target}' is always {parity_name} — parity is an invariant."
             )
 
         return conjectures
@@ -180,13 +182,9 @@ class ConjectureMiner:
         # Fit O(n), O(n^2), O(n log n) heuristically
         max_n, max_v = n_range[-1], seq[-1]
         if max_v <= max_n:
-            conjectures.append(
-                "An upper bound of O(n) appears consistent with small instances."
-            )
-        elif max_v <= max_n ** 2:
-            conjectures.append(
-                "An upper bound of O(n²) appears consistent with small instances."
-            )
+            conjectures.append("An upper bound of O(n) appears consistent with small instances.")
+        elif max_v <= max_n**2:
+            conjectures.append("An upper bound of O(n²) appears consistent with small instances.")
         else:
             bound_guess = max_n * math.ceil(math.log2(max_n + 2))
             if max_v <= bound_guess * 2:

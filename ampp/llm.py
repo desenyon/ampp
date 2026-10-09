@@ -26,6 +26,7 @@ Environment variables
   AMPP_LLM_TEMPERATURE default 0.2
   AMPP_LLM_RETRIES    default 3
 """
+
 from __future__ import annotations
 
 import json
@@ -47,6 +48,7 @@ _BACKOFF_BASE = 2.0  # seconds
 
 
 # ── Abstract base ─────────────────────────────────────────────────────────────
+
 
 class LLMProvider(ABC):
     """Abstract LLM provider.  All providers share the same interface."""
@@ -78,18 +80,18 @@ class LLMProvider(ABC):
         stripped = text.strip()
         if stripped.startswith("```"):
             lines = stripped.splitlines()
-            stripped = "\n".join(
-                lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-            )
+            stripped = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
         try:
-            return json.loads(stripped)
+            parsed = json.loads(stripped)
+            return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             # Last-chance: find first { ... } block
             start = stripped.find("{")
             end = stripped.rfind("}") + 1
             if start >= 0 and end > start:
                 try:
-                    return json.loads(stripped[start:end])
+                    parsed = json.loads(stripped[start:end])
+                    return parsed if isinstance(parsed, dict) else None
                 except json.JSONDecodeError:
                     pass
         logger.debug("complete_json: could not parse JSON from response")
@@ -104,7 +106,7 @@ class LLMProvider(ABC):
                 return fn(*args, **kwargs)
             except Exception as exc:
                 last_exc = exc
-                wait = _BACKOFF_BASE ** attempt
+                wait = _BACKOFF_BASE**attempt
                 logger.warning(
                     "LLM call failed (attempt %d/%d): %s — retrying in %.1fs",
                     attempt + 1,
@@ -112,12 +114,14 @@ class LLMProvider(ABC):
                     exc,
                     wait,
                 )
-                time.sleep(wait)
+                if attempt + 1 < retries:
+                    time.sleep(wait)
         logger.error("LLM call exhausted retries: %s", last_exc)
         raise RuntimeError(f"LLM call failed after {retries} retries") from last_exc
 
 
 # ── OpenAI / OpenClaw provider ────────────────────────────────────────────────
+
 
 class OpenAIProvider(LLMProvider):
     """OpenAI provider.  Also works with OpenClaw and any OpenAI-compatible API.
@@ -142,6 +146,7 @@ class OpenAIProvider(LLMProvider):
     def _get_client(self) -> Any:
         if self._client is None:
             import openai
+
             kwargs: dict[str, Any] = {"api_key": self._api_key}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
@@ -188,6 +193,7 @@ class OpenAIProvider(LLMProvider):
 
 # ── Anthropic provider ────────────────────────────────────────────────────────
 
+
 class AnthropicProvider(LLMProvider):
     """Anthropic (Claude) provider."""
 
@@ -205,6 +211,7 @@ class AnthropicProvider(LLMProvider):
     def _get_client(self) -> Any:
         if self._client is None:
             import anthropic
+
             self._client = anthropic.Anthropic(api_key=self._api_key)
         return self._client
 
@@ -225,9 +232,7 @@ class AnthropicProvider(LLMProvider):
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
-            text_block = next(
-                (b for b in message.content if b.type == "text"), None
-            )
+            text_block = next((b for b in message.content if b.type == "text"), None)
             return text_block.text if text_block is not None else ""
 
         try:
@@ -242,6 +247,7 @@ class AnthropicProvider(LLMProvider):
 
 
 # ── Null / fallback provider ──────────────────────────────────────────────────
+
 
 class NullProvider(LLMProvider):
     """Returns empty results when no API key is available.  Keeps tests runnable."""
@@ -279,18 +285,20 @@ def get_provider() -> LLMProvider:
         return _PROVIDER_OVERRIDE
 
     explicit = os.getenv("AMPP_LLM_PROVIDER", "").lower()
+    if explicit == "null":
+        return NullProvider()
     if explicit == "anthropic":
         if os.getenv("ANTHROPIC_API_KEY"):
-            return AnthropicProvider()
+            return AnthropicProvider(retries=int(os.getenv("AMPP_LLM_RETRIES", "3")))
         logger.warning("AMPP_LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY not set")
 
     if explicit == "openai" or os.getenv("OPENAI_API_KEY"):
         if os.getenv("OPENAI_API_KEY"):
-            return OpenAIProvider()
+            return OpenAIProvider(retries=int(os.getenv("AMPP_LLM_RETRIES", "3")))
         logger.warning("AMPP_LLM_PROVIDER=openai but OPENAI_API_KEY not set")
 
     if os.getenv("ANTHROPIC_API_KEY"):
-        return AnthropicProvider()
+        return AnthropicProvider(retries=int(os.getenv("AMPP_LLM_RETRIES", "3")))
 
     logger.debug("No LLM API key configured — using NullProvider")
     return NullProvider()
@@ -303,6 +311,7 @@ def set_provider(provider: LLMProvider | None) -> None:
 
 
 # ── Convenience wrapper ───────────────────────────────────────────────────────
+
 
 def llm_generate_claims(
     system_prompt: str,

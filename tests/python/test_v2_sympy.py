@@ -1,4 +1,5 @@
 """Tests for V2 SymPy symbolic verifier."""
+
 from __future__ import annotations
 
 import hashlib
@@ -65,15 +66,16 @@ class TestSymPyVerifier:
         passed, details = self.verifier.verify(cand, {})
         assert passed is False
 
-    def test_undecidable_symbolic_passes_conservatively(self):
+    def test_undecidable_symbolic_is_inconclusive(self):
         # A statement that can't be simplified to True/False
         cand = _candidate("some complex math statement that sympy cannot parse")
-        passed, _ = self.verifier.verify(cand, {})
-        # Conservative: undecidable → pass
-        assert passed is True
+        passed, details = self.verifier.verify(cand, {})
+        assert passed is False
+        assert details["outcome"] == "inconclusive"
 
     def test_multiple_claims_all_must_pass(self):
         from ampp.schemas import StepCandidate
+
         cand = StepCandidate(
             id=str(uuid.uuid4()),
             subgoal_id="sg-sympy",

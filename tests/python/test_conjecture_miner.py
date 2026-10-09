@@ -1,4 +1,5 @@
 """Conjecture miner tests."""
+
 from ampp.agents.conjecture_miner import ConjectureMiner
 
 

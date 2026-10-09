@@ -6,8 +6,10 @@ unverifiable steps, and repeated dead ends.
 The Rubric Agent does NOT verify mathematical truth.
 It scores and constrains the workflow so the system stays check-driven.
 """
+
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,14 +19,14 @@ from ampp.schemas import StepCandidate, StrategyFamily
 logger = logging.getLogger(__name__)
 
 # ── Rubric dimension weights ──────────────────────────────────────────────────
-W_CHECKABILITY = 40      # mandatory gate
-W_LOCALITY = 20          # mandatory gate
+W_CHECKABILITY = 40  # mandatory gate
+W_LOCALITY = 20  # mandatory gate
 W_DEPENDENCY_HYGIENE = 20  # mandatory gate
-W_CX_RISK = 10           # mandatory gate
-W_COMPLEXITY = 5         # scored
-W_NOVELTY = 3            # scored
+W_CX_RISK = 10  # mandatory gate
+W_COMPLEXITY = 5  # scored
+W_NOVELTY = 3  # scored
 W_LEAN_FRIENDLINESS = 2  # scored
-PASS_THRESHOLD = 70      # minimum total score to proceed
+PASS_THRESHOLD = 70  # minimum total score to proceed
 
 # V-stage → strategy families that should be penalised on repeated failure
 _STAGE_TO_PENALISE: dict[str, list[StrategyFamily]] = {
@@ -70,13 +72,12 @@ class RubricAgent:
 
     def __init__(self) -> None:
         # Strategy weight vector (strategy_name → float)
-        self._strategy_weights: dict[str, float] = {
-            sf.value: 1.0 for sf in StrategyFamily
-        }
+        self._strategy_weights: dict[str, float] = {sf.value: 1.0 for sf in StrategyFamily}
         # Cumulative failure counts per verifier stage
         self._failure_counts: dict[str, int] = {}
         # Per-attempt failure counts (for rate computation)
         self._total_attempts: int = 0
+        self._seen_attempts: set[str] = set()
         # Set of rejected candidate hashes
         self._rejected_hashes: set[str] = set()
 
@@ -193,9 +194,7 @@ class RubricAgent:
 
         # 2. Locality (mandatory) — prevent bundling of unrelated claims
         if len(cand.new_claims) > 3:
-            mandatory_failed.append(
-                f"locality: too many claims bundled ({len(cand.new_claims)})"
-            )
+            mandatory_failed.append(f"locality: too many claims bundled ({len(cand.new_claims)})")
             breakdown["locality"] = 0
         else:
             breakdown["locality"] = W_LOCALITY
@@ -208,13 +207,8 @@ class RubricAgent:
 
         # 4. Counterexample risk control (mandatory)
         #    If a finite enumeration bound is declared, small_case_tests are required.
-        if (
-            cand.verification_plan.enumeration_bound is not None
-            and not cand.small_case_tests
-        ):
-            mandatory_failed.append(
-                "cx_risk: enumeration_bound set but no small_case_tests"
-            )
+        if cand.verification_plan.enumeration_bound is not None and not cand.small_case_tests:
+            mandatory_failed.append("cx_risk: enumeration_bound set but no small_case_tests")
             breakdown["cx_risk"] = 0
         else:
             breakdown["cx_risk"] = W_CX_RISK
@@ -222,10 +216,7 @@ class RubricAgent:
 
         # 5. Complexity reduction (scored)
         #    Prefer shorter, more atomic claim statements.
-        avg_len = (
-            sum(len(c.statement) for c in cand.new_claims)
-            / max(len(cand.new_claims), 1)
-        )
+        avg_len = sum(len(c.statement) for c in cand.new_claims) / max(len(cand.new_claims), 1)
         if avg_len < 100:
             complexity_score = W_COMPLEXITY
         elif avg_len < 200:
@@ -262,8 +253,16 @@ class RubricAgent:
         )
 
     def _update_failure_counts(self, attempts: list[dict[str, Any]]) -> None:
-        for attempt in attempts:
+        for index, attempt in enumerate(attempts):
+            raw = attempt.get("raw_output") or {}
+            if raw.get("outcome") in ("unverified", "error"):
+                continue
+            identity = str(
+                attempt.get("id") or f"{index}:" + json.dumps(attempt, sort_keys=True, default=str)
+            )
+            if identity in self._seen_attempts:
+                continue
+            self._seen_attempts.add(identity)
             stage = attempt.get("verifier_stage", "UNKNOWN")
             self._failure_counts[stage] = self._failure_counts.get(stage, 0) + 1
             self._total_attempts += 1
-

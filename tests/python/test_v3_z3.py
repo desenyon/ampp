@@ -1,4 +1,5 @@
 """Tests for V3 Z3 SMT verifier."""
+
 from __future__ import annotations
 
 import hashlib
@@ -46,11 +47,11 @@ class TestZ3Verifier:
         # "n = 5" negated → "n != 5" is satisfiable → the claim is NOT universally true
         assert passed is False or "model" in details or "UNKNOWN" in str(details)
 
-    def test_unparseable_statement_passes_conservatively(self):
+    def test_unparseable_statement_is_inconclusive(self):
         cand = _candidate("a highly complex mathematical theorem beyond simple parsing")
-        passed, _ = self.verifier.verify(cand, {})
-        # Conservative pass when Z3 can't parse
-        assert passed is True
+        passed, details = self.verifier.verify(cand, {})
+        assert passed is False
+        assert details["outcome"] == "inconclusive"
 
     def test_valid_inequality_negation_unsat(self):
         # Since our negation parser is simple, undecidable claims should pass
@@ -64,6 +65,7 @@ class TestZ3Verifier:
     def test_z3_not_installed_passes_gracefully(self, monkeypatch):
         """If z3 is not importable, verifier should pass conservatively."""
         import builtins
+
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -75,5 +77,5 @@ class TestZ3Verifier:
         verifier = Z3Verifier()
         cand = _candidate("test")
         passed, details = verifier.verify(cand, {})
-        assert passed is True
-        assert details.get("skipped") is True
+        assert passed is False
+        assert details["outcome"] == "unavailable"

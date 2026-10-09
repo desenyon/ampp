@@ -1,12 +1,11 @@
 """Tests for ProposerEnsemble and strategy controller."""
-from __future__ import annotations
 
+from __future__ import annotations
 
 from ampp.agents.rubric_agent import RubricAgent
 from ampp.agents.strategy_controller import StrategyController
 from ampp.proposers.ensemble import ProposerEnsemble
-from ampp.schemas import StrategyFamily, StepCandidate
-
+from ampp.schemas import StepCandidate, StrategyFamily
 
 SPEC = {
     "raw_statement": "For all n in N, n*(n+1) is even",
@@ -106,18 +105,21 @@ class TestStrategyController:
 
     def test_switch_after_stale(self):
         from ampp.agents.strategy_controller import SWITCH_STALE_THRESHOLD
+
         for _ in range(SWITCH_STALE_THRESHOLD):
             self.ctrl.record_failure("reason A")
         assert self.ctrl.should_switch()
 
     def test_switch_after_identical_failures(self):
         from ampp.agents.strategy_controller import MAX_IDENTICAL_FAILURES
+
         for _ in range(MAX_IDENTICAL_FAILURES):
             self.ctrl.record_failure("exact same reason")
         assert self.ctrl.should_switch()
 
     def test_progress_resets_staleness(self):
         from ampp.agents.strategy_controller import SWITCH_STALE_THRESHOLD
+
         for _ in range(SWITCH_STALE_THRESHOLD - 1):
             self.ctrl.record_failure("r")
         self.ctrl.record_progress()
@@ -153,6 +155,7 @@ class TestStrategyController:
     def test_should_switch_with_attempts_entropy(self):
         """should_switch(attempts=...) fires on high entropy."""
         from ampp.agents.strategy_controller import ENTROPY_SWITCH_THRESHOLD
+
         # Create attempts with many distinct stages to push entropy above threshold
         stages = ["V1", "V2", "V3", "V4", "V5", "V0", "UNKNOWN", "OTHER"]
         attempts = [{"verifier_stage": s} for s in stages * 4]
@@ -190,6 +193,7 @@ class TestStrategyController:
     def test_progress_after_switch_resets(self):
         """next_strategy resets stale iteration counter."""
         from ampp.agents.strategy_controller import SWITCH_STALE_THRESHOLD
+
         for _ in range(SWITCH_STALE_THRESHOLD):
             self.ctrl.record_failure("r")
         assert self.ctrl.should_switch()

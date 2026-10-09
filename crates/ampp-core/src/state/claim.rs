@@ -48,6 +48,34 @@ pub struct VerificationArtifact {
     pub timestamp: DateTime<Utc>,
 }
 
+impl VerificationArtifact {
+    /// Require an explicit, statement-bound V5 certificate from the trusted worker.
+    pub fn supports_statement(&self, statement: &str) -> bool {
+        let d = &self.details;
+        let Some(source) = d["lean_source"].as_str() else {
+            return false;
+        };
+        let Some(axioms) = d["axioms"].as_array() else {
+            return false;
+        };
+        self.stage == "V5"
+            && self.result == "passed"
+            && d["outcome"] == "passed"
+            && d["policy"] == "lean-kernel-v1"
+            && d["lean_result"] == "compiled"
+            && d["statement"].as_str() == Some(statement.trim())
+            && !source.is_empty()
+            && d["source_sha256"].as_str()
+                == Some(hex::encode(Sha256::digest(source.as_bytes())).as_str())
+            && axioms.iter().all(|a| {
+                matches!(
+                    a.as_str(),
+                    Some("propext" | "Classical.choice" | "Quot.sound")
+                )
+            })
+    }
+}
+
 impl Claim {
     pub fn new(
         statement: impl Into<String>,
@@ -72,10 +100,10 @@ impl Claim {
         }
     }
 
-    /// Canonical SHA-256 hash of the trimmed, lowercased statement.
+    /// SHA-256 of the trimmed statement; mathematical identifiers are case-sensitive.
     pub fn hash_statement(statement: &str) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(statement.trim().to_lowercase().as_bytes());
+        hasher.update(statement.trim().as_bytes());
         hex::encode(hasher.finalize())
     }
 
@@ -84,6 +112,10 @@ impl Claim {
         if self.status == ClaimStatus::Rejected {
             anyhow::bail!("Cannot verify a rejected claim: {}", self.id);
         }
+        anyhow::ensure!(
+            artifact.supports_statement(&self.statement),
+            "Claim requires statement-bound Lean evidence"
+        );
         self.status = ClaimStatus::Verified;
         self.verification_artifacts.push(artifact);
         self.updated_at = Utc::now();
@@ -108,6 +140,10 @@ impl Claim {
 
     pub fn is_verified(&self) -> bool {
         self.status == ClaimStatus::Verified
+            && self
+                .verification_artifacts
+                .iter()
+                .any(|a| a.supports_statement(&self.statement))
     }
 
     pub fn is_rejected(&self) -> bool {
